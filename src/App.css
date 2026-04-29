@@ -1,0 +1,16 @@
+/* App layout */
+.app-root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-app);
+  color: var(--text-primary);
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  min-height: 0; /* Allow children to shrink */
+  overflow: hidden;
+}
