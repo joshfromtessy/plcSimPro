@@ -38,6 +38,20 @@ const COUNTER_ITEMS: PaletteItem[] = [
   { type: "RES", label: "RES", description: "Reset" },
 ];
 
+const COMPARE_ITEMS: PaletteItem[] = [
+  { type: "EQU", label: "EQU", description: "Equal" },
+  { type: "NEQ", label: "NEQ", description: "Not Equal" },
+  { type: "LES", label: "LES", description: "Less Than" },
+  { type: "LEQ", label: "LEQ", description: "Less Than or Equal" },
+  { type: "GRT", label: "GRT", description: "Greater Than" },
+  { type: "GEQ", label: "GEQ", description: "Greater Than or Equal" },
+];
+
+const MOVE_ITEMS: PaletteItem[] = [
+  { type: "MOV", label: "MOV", description: "Move" },
+  { type: "MVM", label: "MVM", description: "Masked Move" },
+];
+
 // ── SVG instruction icons ──────────────────────────────────────────────────
 // All use stroke="currentColor" so they inherit the group accent colour.
 
@@ -177,6 +191,14 @@ const ICONS: Record<string, React.ReactNode> = {
   CTU: <BlockIcon label="CTU" />,
   CTD: <BlockIcon label="CTD" />,
   RES: <BlockIcon label="RES" />,
+  EQU: <BlockIcon label="EQU" />,
+  NEQ: <BlockIcon label="NEQ" />,
+  LES: <BlockIcon label="LES" />,
+  LEQ: <BlockIcon label="LEQ" />,
+  GRT: <BlockIcon label="GRT" />,
+  GEQ: <BlockIcon label="GEQ" />,
+  MOV: <BlockIcon label="MOV" />,
+  MVM: <BlockIcon label="MVM" />,
 };
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -201,6 +223,10 @@ export function InstructionPalette() {
       <PaletteGroup label="Contacts" colorClass="palette-group--contact" items={CONTACT_ITEMS}
         onDragStart={handleDragStart} onDragEnd={handleDragEnd} />
       <PaletteGroup label="Outputs"  colorClass="palette-group--output"  items={OUTPUT_ITEMS}
+        onDragStart={handleDragStart} onDragEnd={handleDragEnd} />
+      <PaletteGroup label="Compare"  colorClass="palette-group--compare" items={COMPARE_ITEMS}
+        onDragStart={handleDragStart} onDragEnd={handleDragEnd} />
+      <PaletteGroup label="Move"     colorClass="palette-group--move"    items={MOVE_ITEMS}
         onDragStart={handleDragStart} onDragEnd={handleDragEnd} />
       <PaletteGroup label="Timers"   colorClass="palette-group--timer"   items={TIMER_ITEMS}
         onDragStart={handleDragStart} onDragEnd={handleDragEnd} />

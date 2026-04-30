@@ -75,6 +75,13 @@ export type InstructionType =
   | "OSR"   // One-Shot Rising    — true for one scan on rising edge
   | "OSF"   // One-Shot Falling   — true for one scan on falling edge
   | "ONS"   // One-Shot           — passes power for one scan on rising edge of rung condition
+  // Compare instructions (contact-class) — conduct when comparison is TRUE
+  | "EQU"   // Equal              — Source A == Source B
+  | "NEQ"   // Not Equal          — Source A != Source B
+  | "LES"   // Less Than          — Source A <  Source B
+  | "LEQ"   // Less Than or Equal — Source A <= Source B
+  | "GRT"   // Greater Than       — Source A >  Source B
+  | "GEQ"   // Greater Than Equal — Source A >= Source B
   // Output instructions (coils) — must be at the END of a rung path
   | "OTE"   // Output Energize    — sets tag = rung condition
   | "OTL"   // Output Latch       — sets tag TRUE when rung TRUE
@@ -85,16 +92,21 @@ export type InstructionType =
   | "RTO"   // Retentive Timer On
   | "CTU"   // Count Up
   | "CTD"   // Count Down
-  | "RES";  // Reset (Timer/Counter)
+  | "RES"   // Reset (Timer/Counter)
+  // Move/Math (output-class)
+  | "MOV"   // Move               — Dest = Source (when rung TRUE)
+  | "MVM";  // Masked Move        — Dest = (Source & Mask) | (Dest & ~Mask)
 
 /** Instructions that can appear in the middle of a series path */
 export const CONTACT_INSTRUCTIONS: ReadonlySet<InstructionType> = new Set([
   "XIC", "XIO", "OSR", "OSF", "ONS",
+  "EQU", "NEQ", "LES", "LEQ", "GRT", "GEQ",
 ]);
 
 /** Instructions that must be at the end (rightmost) of a rung path */
 export const OUTPUT_INSTRUCTIONS: ReadonlySet<InstructionType> = new Set([
   "OTE", "OTL", "OTU", "TON", "TOF", "RTO", "CTU", "CTD", "RES",
+  "MOV", "MVM",
 ]);
 
 export const COIL_OUTPUT_INSTRUCTIONS: ReadonlySet<InstructionType> = new Set([
@@ -131,7 +143,28 @@ export interface CounterParams {
   presetTag?: string;  // optional DINT/INT tag reference — overrides preset literal
 }
 
-export type InstructionParams = TimerParams | CounterParams | Record<string, never>;
+/**
+ * Params for compare instructions (EQU, NEQ, LES, LEQ, GRT, GEQ).
+ * Each operand is either a tag name (string) or a numeric literal stored as string.
+ */
+export interface CompareParams {
+  sourceA: string;   // tag name or numeric literal, e.g. "MyTag" or "42"
+  sourceB: string;
+}
+
+/**
+ * Params for MOV / MVM instructions.
+ * source  — tag name or numeric literal
+ * dest    — always a tag name (write target)
+ * mask    — MVM only: tag name or hex literal, e.g. "0x00FF"
+ */
+export interface MoveParams {
+  source: string;
+  dest: string;
+  mask?: string;     // MVM only
+}
+
+export type InstructionParams = TimerParams | CounterParams | CompareParams | MoveParams | Record<string, never>;
 
 // ---------------------------------------------------------------------------
 // AST Node types
@@ -303,8 +336,16 @@ export interface RungPowerState {
   rungId: string;
   /** Top-level rung powered */
   rungPowered: boolean;
-  /** Per-node powered states — keyed by node id */
+  /** Per-node powered states — keyed by node id (drives block border colour) */
   nodePowered: Map<string, boolean>;
+  /**
+   * Per-node OUTPUT power — the condition that exits the right side of a node.
+   * Usually equals nodePowered, but differs for terminal blocks like TON/CTU
+   * where the block lights up (nodePowered=true) yet passes no power downstream
+   * (nodeOutputPowered=false).  Used to colour the wire to the right of a node.
+   * Falls back to nodePowered when absent.
+   */
+  nodeOutputPowered: Map<string, boolean>;
   /** Per-leg powered states — keyed by legId */
   legPowered: Map<string, boolean>;
 }

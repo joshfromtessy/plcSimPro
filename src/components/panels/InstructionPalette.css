@@ -152,3 +152,13 @@
 .palette-group--counter .palette-item-mnemonic {
   color: var(--accent-purple);
 }
+
+.palette-group--compare .palette-item-icon,
+.palette-group--compare .palette-item-mnemonic {
+  color: var(--accent-yellow);
+}
+
+.palette-group--move .palette-item-icon,
+.palette-group--move .palette-item-mnemonic {
+  color: var(--accent-red);
+}

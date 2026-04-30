@@ -23,6 +23,9 @@ import type {
   ValidationResult,
   TimerParams,
   CounterParams,
+  CompareParams,
+  MoveParams,
+  InstructionParams,
 } from "../model/types";
 
 import {
@@ -56,11 +59,17 @@ import {
 // ---------------------------------------------------------------------------
 
 function makeInstruction(type: InstructionType): InstructionNode {
-  let params: TimerParams | CounterParams | Record<string, never> = {};
+  let params: InstructionParams = {};
   if (type === "TON" || type === "TOF" || type === "RTO") {
     params = { preset: 1000, accum: 0 } satisfies TimerParams;
   } else if (type === "CTU" || type === "CTD") {
     params = { preset: 10, accum: 0 } satisfies CounterParams;
+  } else if (["EQU","NEQ","LES","LEQ","GRT","GEQ"].includes(type)) {
+    params = { sourceA: "", sourceB: "" } satisfies CompareParams;
+  } else if (type === "MOV") {
+    params = { source: "", dest: "" } satisfies MoveParams;
+  } else if (type === "MVM") {
+    params = { source: "", dest: "", mask: "0xFFFFFFFF" } satisfies MoveParams;
   }
   return {
     kind: "instruction",

@@ -156,7 +156,8 @@ interface SizeResult {
   wireYLocal: number;
 }
 
-const TIMER_COUNTER_TYPES = new Set(["TON", "TOF", "RTO", "CTU", "CTD"]);
+const TIMER_COUNTER_TYPES   = new Set(["TON", "TOF", "RTO", "CTU", "CTD"]);
+const COMPARE_MOVE_TYPES    = new Set(["EQU", "NEQ", "LES", "LEQ", "GRT", "GEQ", "MOV", "MVM"]);
 
 /** Set before each layoutRung call; used by measureInstruction (single-threaded, safe). */
 let _showNodeComments = false;
@@ -165,6 +166,10 @@ function measureInstruction(node: InstructionNode): SizeResult {
   const ch = _showNodeComments ? COMMENT_H : 0;
   if (TIMER_COUNTER_TYPES.has(node.type)) {
     return { w: INST_W, h: COMPLEX_INST_H + ch, wireYLocal: COMPLEX_INST_WIRE_Y + ch };
+  }
+  if (COMPARE_MOVE_TYPES.has(node.type)) {
+    // Two data rows (sourceA/B or source/dest) — a bit shorter than timers
+    return { w: INST_W, h: 72 + ch, wireYLocal: COMPLEX_INST_WIRE_Y + ch };
   }
   return { w: INST_W, h: INST_H + ch, wireYLocal: INST_H / 2 + ch };
 }
@@ -251,7 +256,16 @@ function placeNodes(
 }
 
 function isOutputNode(node: SeriesNode): boolean {
-  return isInstruction(node) && isCoilOutput(node.type);
+  if (isInstruction(node)) return isCoilOutput(node.type);
+  // A branch is treated as an "output node" when every leg contains
+  // only coil output instructions — i.e. parallel outputs (Studio 5000 style).
+  if (isBranch(node)) {
+    return node.legs.every(leg =>
+      leg.nodes.length > 0 &&
+      leg.nodes.every(n => isInstruction(n) && isCoilOutput(n.type))
+    );
+  }
+  return false;
 }
 
 function placeTopLevelNodes(

@@ -426,7 +426,7 @@ export class LadderRenderer {
       // Subsequent nodes: energised only if the previous node passed power through.
       const inputPowered = i === 0
         ? power !== null
-        : (power?.nodePowered.get(layout.nodes[i - 1].nodeId) ?? false);
+        : this._outPw(power, layout.nodes[i - 1].nodeId);
       this._drawNode(g, rr.container, layout.nodes[i], rung, power, inputPowered);
     }
 
@@ -558,13 +558,13 @@ export class LadderRenderer {
         for (let i = 0; i < bandNodes.length - 1; i++) {
           const cur  = bandNodes[i];
           const next = bandNodes[i + 1];
-          const pw   = power?.nodePowered.get(cur.nodeId) ?? false;
+          const pw   = this._outPw(power, cur.nodeId);
           this._seg(g, cur.x + cur.w, next.x, wireY, pw);
         }
 
         // Right stub — last band reaches the shared right rail; others fold.
         const last   = bandNodes[bandNodes.length - 1];
-        const lastPw = power?.nodePowered.get(last.nodeId) ?? false;
+        const lastPw = this._outPw(power, last.nodeId);
         const rightEnd = isLast ? this._rightRailLocalX : layout.seriesEndX + 4;
         this._seg(g, last.x + last.w, rightEnd, wireY, isLast ? lastPw : false);
       }
@@ -592,13 +592,13 @@ export class LadderRenderer {
     for (let i = 0; i < layout.nodes.length - 1; i++) {
       const cur  = layout.nodes[i];
       const next = layout.nodes[i + 1];
-      const pw   = power?.nodePowered.get(cur.nodeId) ?? false;
+      const pw   = this._outPw(power, cur.nodeId);
       this._seg(g, cur.x + cur.w, next.x, wireY, pw);
     }
 
     // Last node → right rail (square cap overlaps 1px into the rail rect).
     const last   = layout.nodes[layout.nodes.length - 1];
-    const lastPw = power?.nodePowered.get(last.nodeId) ?? false;
+    const lastPw = this._outPw(power, last.nodeId);
     this._seg(g, last.x + last.w, rightEnd, wireY, lastPw);
   }
 
@@ -647,6 +647,23 @@ export class LadderRenderer {
     }
   }
 
+  /** Truncate an operand string for display inside a function block cell. */
+  private _truncOp(s: string, max = 9): string {
+    return s.length > max ? s.slice(0, max - 1) + "…" : s;
+  }
+
+  /**
+   * Wire-exit power for a node: uses nodeOutputPowered when available (so
+   * terminal blocks like TON show their input lit but their output dark),
+   * falling back to nodePowered for nodes that don't set it.
+   */
+  private _outPw(power: RungPowerState | null, nodeId: string): boolean {
+    if (!power) return false;
+    const out = power.nodeOutputPowered?.get(nodeId);
+    if (out !== undefined) return out;
+    return power.nodePowered.get(nodeId) ?? false;
+  }
+
   private _seg(g: Graphics, x1: number, x2: number, y: number, powered: boolean) {
     if (x2 <= x1) return;
     g.moveTo(x1, y).lineTo(x2, y)
@@ -666,9 +683,10 @@ export class LadderRenderer {
     if (isLayoutInstruction(node)) {
       const ast = this._findAstInstruction(rung.nodes, node.nodeId);
       if (!ast) return;
-      const powered  = power?.nodePowered.get(node.nodeId) ?? false;
-      const selected = this._selectedNodeId === node.nodeId;
-      this._drawInstruction(g, container, node, ast, powered, selected, inputPowered);
+      const powered    = power?.nodePowered.get(node.nodeId) ?? false;
+      const outPowered = this._outPw(power, node.nodeId);
+      const selected   = this._selectedNodeId === node.nodeId;
+      this._drawInstruction(g, container, node, ast, powered, outPowered, selected, inputPowered);
     } else {
       this._drawBranch(g, container, node, rung, power, inputPowered);
     }
@@ -682,6 +700,7 @@ export class LadderRenderer {
     layout: LayoutInstruction,
     node: InstructionNode,
     powered: boolean,
+    outPowered: boolean,
     selected: boolean,
     inputPowered: boolean = false
   ) {
@@ -691,6 +710,7 @@ export class LadderRenderer {
 
     const isOutput      = ["OTE","OTL","OTU"].includes(node.type);
     const isTimerCtr    = ["TON","TOF","RTO","CTU","CTD"].includes(node.type);
+    const isCompareMov  = ["EQU","NEQ","LES","LEQ","GRT","GEQ","MOV","MVM"].includes(node.type);
     const isComplex     = isTimerCtr || node.type === "RES";
 
     const wireColor = powered ? C.wireOn : C.wireOff;
@@ -717,7 +737,7 @@ export class LadderRenderer {
     if (isTimerCtr) {
       // ── Studio 5000-style function block: Tag / Pre / Acc rows ────────────
       // wireY is near the top of the block (COMPLEX_INST_WIRE_Y px from layout top)
-      const bx = x + 4, by = wireY - 14, bw = w - 8, bh = 74;
+      const bx = x + 8, by = wireY - 14, bw = w - 16, bh = 74;
       if (selected) {
         g.roundRect(bx - 2, by - 2, bw + 4, bh + 4, 5)
           .stroke({ color: C.nodeSelected, width: 1.5 });
@@ -726,9 +746,10 @@ export class LadderRenderer {
         .fill({ color: powered ? C.nodeOnBg : C.nodeBg })
         .stroke({ color: powered ? C.nodeOn : C.nodeBorder, width: 1 });
 
-      // Wire stubs
+      // Left stub = input power (block glows while running).
+      // Right stub = DN-based output (only lit when timer/counter is done).
       this._seg(g, x, bx, wireY, powered);
-      this._seg(g, bx + bw, x + w, wireY, powered);
+      this._seg(g, bx + bw, x + w, wireY, outPowered);
 
       // Mnemonic in the header band (above the divider)
       const mn = new Text({ text: node.type, style: mnStyle });
@@ -791,6 +812,80 @@ export class LadderRenderer {
         const val = new Text({ text: values[i], style: valStyles[i] });
         val.anchor.set(1, 0.5);
         val.position.set(bx + bw - 4, rowYs[i]);
+        container.addChild(val);
+      }
+
+    } else if (isCompareMov) {
+      // ── Compare / Move function block ─────────────────────────────────────
+      // Wire enters near the top of the block (same as timer blocks).
+      // 8px margins give visible stubs on each side matching Studio 5000 style.
+      const bx = x + 8, by = wireY - 14, bw = w - 16, bh = 58;
+      const isMovInst = node.type === "MOV" || node.type === "MVM";
+      const p = node.params as any;
+
+      if (selected) {
+        g.roundRect(bx - 2, by - 2, bw + 4, bh + 4, 5)
+          .stroke({ color: C.nodeSelected, width: 1.5 });
+      }
+      g.roundRect(bx, by, bw, bh, 3)
+        .fill({ color: powered ? C.nodeOnBg : C.nodeBg })
+        .stroke({ color: powered ? C.nodeOn : C.nodeBorder, width: 1 });
+
+      // Wire stubs
+      this._seg(g, x, bx, wireY, inputPowered);
+      this._seg(g, bx + bw, x + w, wireY, powered);
+
+      // Mnemonic in header
+      const mn = new Text({ text: node.type, style: mnStyle });
+      mn.anchor.set(0.5, 0.5);
+      mn.position.set(cx, wireY - 5);
+      container.addChild(mn);
+
+      // Divider
+      g.moveTo(bx + 1, wireY + 4).lineTo(bx + bw - 1, wireY + 4)
+        .stroke({ color: powered ? C.nodeOn : C.nodeBorder, width: 1 });
+
+      // Row styles
+      const labelSt = new TextStyle({ fontFamily: "Consolas, monospace", fontSize: 9, fill: C.textDim });
+      const valSt   = new TextStyle({ fontFamily: "Consolas, monospace", fontSize: 10, fill: powered ? C.textGreen : C.textPrimary });
+      const destSt  = new TextStyle({ fontFamily: "Consolas, monospace", fontSize: 10, fill: powered ? C.textGreen : C.textYellow });
+
+      const rowYs  = [wireY + 18, wireY + 36];
+      let labels: string[], values: string[];
+
+      if (isMovInst) {
+        labels = ["Src", "Dst"];
+        values = [
+          this._truncOp(p?.source ?? "?"),
+          this._truncOp(p?.dest   ?? "?"),
+        ];
+        if (node.type === "MVM") {
+          labels = ["Src", "Msk", "Dst"];
+          // squeeze 3 rows into the same space
+          const rowY3 = [wireY + 14, wireY + 28, wireY + 42];
+          const vals3 = [this._truncOp(p?.source ?? "?"), this._truncOp(p?.mask ?? "?"), _truncOp(p?.dest ?? "?")];
+          for (let i = 0; i < 3; i++) {
+            const lbl = new Text({ text: labels[i], style: labelSt });
+            lbl.anchor.set(0, 0.5); lbl.position.set(bx + 4, rowY3[i]);
+            container.addChild(lbl);
+            const val = new Text({ text: vals3[i], style: i < 2 ? valSt : destSt });
+            val.anchor.set(1, 0.5); val.position.set(bx + bw - 4, rowY3[i]);
+            container.addChild(val);
+          }
+          // skip generic 2-row render below
+          labels = []; values = [];
+        }
+      } else {
+        labels = ["SrcA", "SrcB"];
+        values = [this._truncOp(p?.sourceA ?? "?"), this._truncOp(p?.sourceB ?? "?")];
+      }
+
+      for (let i = 0; i < labels.length; i++) {
+        const lbl = new Text({ text: labels[i], style: labelSt });
+        lbl.anchor.set(0, 0.5); lbl.position.set(bx + 4, rowYs[i]);
+        container.addChild(lbl);
+        const val = new Text({ text: values[i], style: i === 1 && isMovInst ? destSt : valSt });
+        val.anchor.set(1, 0.5); val.position.set(bx + bw - 4, rowYs[i]);
         container.addChild(val);
       }
 
@@ -865,30 +960,31 @@ export class LadderRenderer {
       container.addChild(mn);
 
     } else if (node.type === "ONS") {
-      // ── ONS: compact box with rising-pulse glyph ──────────────────────────
-      const bx = x + 6, by = wireY - 20, bw = w - 12, bh = 40;
+      // ── ONS: slim inline box — same height feel as a contact ──────────────
+      const bh = 24, bw = w - 20;
+      const bx = x + 10, by = wireY - bh / 2;
       if (selected) {
         g.roundRect(bx - 2, by - 2, bw + 4, bh + 4, 5)
           .stroke({ color: C.nodeSelected, width: 1.5 });
       }
       g.roundRect(bx, by, bw, bh, 3)
         .fill({ color: powered ? C.nodeOnBg : C.nodeBg })
-        .stroke({ color: powered ? C.nodeOn : C.nodeBorder, width: 1 });
+        .stroke({ color: powered ? C.nodeOn : C.nodeBorder, width: 0.75 });
 
       // Wire stubs
       this._seg(g, x, bx, wireY, inputPowered);
       this._seg(g, bx + bw, x + w, wireY, powered);
 
-      // Rising-pulse glyph (step-up shape) centred in box
+      // Rising-edge glyph — slightly smaller to fit the tighter box
       const px = cx, py = wireY;
-      const pw2 = 10, ph2 = 6;
+      const pw2 = 8, ph2 = 5;
       const pulseColor = powered ? C.wireOn : C.textDim;
       g.moveTo(px - pw2,     py + ph2)
        .lineTo(px - pw2,     py - ph2)
        .lineTo(px,           py - ph2)
        .lineTo(px,           py + ph2)
        .lineTo(px + pw2,     py + ph2)
-       .stroke({ color: pulseColor, width: 1.8 });
+       .stroke({ color: pulseColor, width: 1.5 });
 
       // Tag above
       const tag = new Text({ text: node.tagName || "?", style: tagStyle });
@@ -1019,19 +1115,19 @@ export class LadderRenderer {
         for (let ni = 0; ni < leg.nodes.length; ni++) {
           const nodeInputPowered = ni === 0
             ? inputPowered
-            : (power?.nodePowered.get(leg.nodes[ni - 1].nodeId) ?? false);
+            : this._outPw(power, leg.nodes[ni - 1].nodeId);
           this._drawNode(g, container, leg.nodes[ni], rung, power, nodeInputPowered);
         }
 
         for (let i = 0; i < leg.nodes.length - 1; i++) {
           const cur  = leg.nodes[i];
           const next = leg.nodes[i + 1];
-          const pw   = power?.nodePowered.get(cur.nodeId) ?? false;
+          const pw   = this._outPw(power, cur.nodeId);
           g.moveTo(cur.x + cur.w, leg.wireY).lineTo(next.x, leg.wireY)
             .stroke({ color: pw ? C.wireOn : C.wireOff, width: 2 });
         }
 
-        const lastPow = power?.nodePowered.get(last.nodeId) ?? false;
+        const lastPow = this._outPw(power, last.nodeId);
         g.moveTo(last.x + last.w, leg.wireY).lineTo(legRight, leg.wireY)
           .stroke({ color: lastPow ? C.wireOn : C.wireOff, width: 2 });
       }

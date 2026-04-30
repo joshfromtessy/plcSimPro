@@ -22,6 +22,8 @@ import type {
   InstructionNode,
   TimerParams,
   CounterParams,
+  CompareParams,
+  MoveParams,
   InstructionParams,
 } from "./types";
 
@@ -205,6 +207,65 @@ function writeBool(
 }
 
 // ---------------------------------------------------------------------------
+// Numeric operand resolution (compare / move)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a compare/move operand to a number.
+ * Operand is either:
+ *   - A numeric literal string: "42", "-7", "3.14", "0xFF"
+ *   - A tag name (including dot/array notation): "MyTag", "Arr[2].5", etc.
+ */
+function resolveOperand(operand: string, tags: Map<string, TagDefinition>): number {
+  if (!operand) return 0;
+  // Hex literal
+  if (/^0x[0-9a-fA-F]+$/i.test(operand)) return parseInt(operand, 16);
+  // Decimal/float literal
+  const lit = Number(operand);
+  if (!isNaN(lit)) return lit;
+  // Tag reference
+  return readTagNumber(operand, tags);
+}
+
+/** Read a tag as a number — handles BOOL, DINT, INT, REAL, and all dot/array notations. */
+function readTagNumber(tagName: string, tags: Map<string, TagDefinition>): number {
+  const ref = parseTagRef(tagName);
+  const tag = tags.get(ref.base);
+  if (!tag) return 0;
+
+  if (tag.dataType === "BOOL") return readTagBit(tags, tagName) ? 1 : 0;
+  if (tag.dataType === "REAL") return tag.value as number;
+  if (tag.dataType === "DINT" || tag.dataType === "INT") {
+    const word = getWordValue(tag, ref.idx);
+    if (ref.bit !== undefined) return ((word >> ref.bit) & 1);
+    return word;
+  }
+  return 0;
+}
+
+/** Write a numeric value to a tag, handling BOOL, DINT, INT, REAL, and array/bit refs. */
+function writeTagNumber(tagName: string, value: number, tags: Map<string, TagDefinition>): void {
+  const ref = parseTagRef(tagName);
+  const tag = tags.get(ref.base);
+  if (!tag) return;
+
+  if (tag.dataType === "BOOL") {
+    writeBool(tags, tagName, value !== 0);
+  } else if (tag.dataType === "REAL") {
+    tag.value = value;
+  } else if (tag.dataType === "DINT" || tag.dataType === "INT") {
+    if (ref.bit !== undefined) {
+      // bit write
+      const word = getWordValue(tag, ref.idx);
+      const b = ref.bit & 31;
+      setWordValue(tag, ref.idx, (value !== 0 ? (word | (1 << b)) : (word & ~(1 << b))) | 0);
+    } else {
+      setWordValue(tag, ref.idx, value | 0);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Preset resolution — literal or DINT/INT tag reference
 // ---------------------------------------------------------------------------
 
@@ -248,6 +309,24 @@ function evaluateContact(
       // One-shots require tracking previous state per node — handled via _osBitMap
       // Simplified: treat as XIC/XIO for now; proper OSR/OSF needs prev-scan state
       return conditionIn && readTagBit(tags, node.tagName);
+
+    // ── Compare instructions ──────────────────────────────────────────────
+    case "EQU": case "NEQ": case "LES": case "LEQ": case "GRT": case "GEQ": {
+      if (!conditionIn) return false;
+      const p = node.params as CompareParams;
+      const a = resolveOperand(p?.sourceA ?? "", tags);
+      const b = resolveOperand(p?.sourceB ?? "", tags);
+      switch (node.type) {
+        case "EQU": return a === b;
+        case "NEQ": return a !== b;
+        case "LES": return a <   b;
+        case "LEQ": return a <=  b;
+        case "GRT": return a >   b;
+        case "GEQ": return a >=  b;
+      }
+      return false;
+    }
+
     default:
       // Output instructions are not evaluated as contacts
       return conditionIn;
@@ -262,7 +341,7 @@ function executeOutput(
   node: InstructionNode,
   conditionIn: boolean,
   tags: Map<string, TagDefinition>,
-  nowMs: number
+  deltaMs: number
 ): void {
   switch (node.type) {
     case "OTE":
@@ -282,26 +361,27 @@ function executeOutput(
       if (!tag || tag.dataType !== "TIMER") break;
       const td = tag.timerData!;
       const preset = resolvePreset(node.params, tags, 1000);
-      td.preset = preset; // keep timerData in sync for display
+      td.preset = preset;
 
       if (conditionIn) {
-        if (!td.en) {
-          // Rising edge — start timer
-          td.en = true;
-          td.tt = true;
-          td._startMs = nowMs;
+        td.en = true;
+        if (!td.dn) {
+          td.accum = Math.min(td.accum + deltaMs, preset);
         }
-        const elapsed = nowMs - (td._startMs ?? nowMs);
-        td.accum = Math.min(elapsed, preset);
-        td.dn = td.accum >= preset;
-        td.tt = !td.dn;
+        if (td.accum >= preset) {
+          td.accum = preset;
+          td.dn   = true;
+          td.tt   = false;
+        } else {
+          td.dn = false;
+          td.tt = true;
+        }
       } else {
-        // Rung goes false — reset timer (TON is non-retentive)
-        td.en = false;
-        td.tt = false;
-        td.dn = false;
+        // Rung false — non-retentive reset
+        td.en    = false;
+        td.tt    = false;
+        td.dn    = false;
         td.accum = 0;
-        delete td._startMs;
       }
       break;
     }
@@ -314,25 +394,54 @@ function executeOutput(
       td.preset = preset;
 
       if (conditionIn) {
-        // Rung true — TOF output is ON, timer resets
-        td.en = true;
-        td.tt = false;
-        td.dn = true;
+        // Rung true: output ON, accumulator resets, no timing
+        td.en    = true;
+        td.tt    = false;
+        td.dn    = true;
         td.accum = 0;
-        delete td._startMs;
       } else {
-        if (td.en) {
-          // Falling edge — start timing
-          td._startMs = td._startMs ?? nowMs;
-          const elapsed = nowMs - td._startMs;
-          td.accum = Math.min(elapsed, preset);
-          td.tt = !td.dn;
-          if (elapsed >= preset) {
-            td.dn = false;
-            td.tt = false;
-            td.en = false;
+        // Rung false: start/continue timing; EN mirrors rung
+        td.en = false;
+        if (td.dn) {
+          // Still within the off-delay window — accumulate
+          td.tt    = true;
+          td.accum = Math.min(td.accum + deltaMs, preset);
+          if (td.accum >= preset) {
+            td.accum = preset;
+            td.dn    = false;
+            td.tt    = false;
           }
         }
+      }
+      break;
+    }
+
+    case "RTO": {
+      // Retentive Timer On — accumulates while rung is true, holds on false.
+      // Only RES resets it.
+      const tag = tags.get(node.tagName);
+      if (!tag || tag.dataType !== "TIMER") break;
+      const td = tag.timerData!;
+      const preset = resolvePreset(node.params, tags, 1000);
+      td.preset = preset;
+
+      if (conditionIn) {
+        td.en = true;
+        if (!td.dn) {
+          td.accum = Math.min(td.accum + deltaMs, preset);
+        }
+        if (td.accum >= preset) {
+          td.accum = preset;
+          td.dn    = true;
+          td.tt    = false;
+        } else {
+          td.dn = false;
+          td.tt = true;
+        }
+      } else {
+        // Rung false: EN and TT clear, but ACC and DN are retained
+        td.en = false;
+        td.tt = false;
       }
       break;
     }
@@ -387,15 +496,29 @@ function executeOutput(
       }
       break;
     }
+
+    case "MOV": {
+      if (!conditionIn) break;
+      const p = node.params as MoveParams;
+      if (!p?.dest) break;
+      const val = resolveOperand(p.source ?? "", tags);
+      writeTagNumber(p.dest, val, tags);
+      break;
+    }
+
+    case "MVM": {
+      if (!conditionIn) break;
+      const p = node.params as MoveParams;
+      if (!p?.dest) break;
+      const src  = resolveOperand(p.source ?? "", tags) | 0;
+      const mask = resolveOperand(p.mask   ?? "0xFFFFFFFF", tags) | 0;
+      const dest = readTagNumber(p.dest, tags) | 0;
+      writeTagNumber(p.dest, ((src & mask) | (dest & ~mask)) | 0, tags);
+      break;
+    }
   }
 }
 
-// Extend TimerData to allow runtime _startMs tracking
-declare module "./types" {
-  interface TimerData {
-    _startMs?: number;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Series / Branch evaluation
@@ -410,38 +533,90 @@ function evaluateSeries(
   conditionIn: boolean,
   tags: Map<string, TagDefinition>,
   nodePowered: Map<string, boolean>,
+  nodeOutputPowered: Map<string, boolean>,
   legPowered: Map<string, boolean>,
-  nowMs: number,
+  deltaMs: number,
   insideBranch: boolean
 ): boolean {
-  let condition = conditionIn;
+  // Two-condition model:
+  //   condition        — the live wire value flowing right; terminal blocks
+  //                      (TON/CTU/etc.) set this to false so the downstream
+  //                      wire goes dark and coil outputs stay de-energised.
+  //   contactCondition — accumulated result of contacts only.  Terminal blocks
+  //                      leave this untouched so that a contact placed AFTER a
+  //                      terminal restarts from the last-known contact chain
+  //                      value rather than from false.
+  //
+  // Result:
+  //   [XIC A][TON T][OTE B]            → OTE = false always (terminal blocks wire)
+  //   [XIC A][TON T][XIC T.DN][OTE B]  → OTE = A AND T.DN  (works on one rung)
+  let condition        = conditionIn;
+  let contactCondition = conditionIn;
 
   for (const node of nodes) {
     if (isInstruction(node)) {
-      // Contacts: evaluate gate
-      // Outputs: will be executed, and count as "always pass through" for power flow
       if (node.type === "ONS") {
-        // One-Shot: passes for exactly ONE scan on the rising edge of conditionIn.
-        // tagName is the Storage Bit (BOOL) — holds the previous conditionIn state.
-        // Read prev state, compute output, then update storage bit.
         const storagePrev = readBool(tags, node.tagName);
-        const out = condition && !storagePrev;
-        writeBool(tags, node.tagName, condition); // arm/disarm for next scan
-        condition = out;
-      } else if (node.type === "XIC" || node.type === "XIO" || node.type === "OSR" || node.type === "OSF") {
-        condition = evaluateContact(node, tags, condition);
+        const out = contactCondition && !storagePrev;
+        writeBool(tags, node.tagName, contactCondition);
+        condition        = out;
+        contactCondition = out;
+        nodePowered.set(node.id, condition);
+        nodeOutputPowered.set(node.id, condition);
+      } else if (
+        node.type === "XIC" || node.type === "XIO" ||
+        node.type === "OSR" || node.type === "OSF" ||
+        node.type === "EQU" || node.type === "NEQ" ||
+        node.type === "LES" || node.type === "LEQ" ||
+        node.type === "GRT" || node.type === "GEQ"
+      ) {
+        // Contacts evaluate against contactCondition, not the (possibly blocked)
+        // wire condition.  This lets them "see through" an upstream terminal block.
+        condition        = evaluateContact(node, tags, contactCondition);
+        contactCondition = condition;
+        nodePowered.set(node.id, condition);
+        nodeOutputPowered.set(node.id, condition);
       } else {
-        // Output-class: execute side effects, power flows through
+        // Output-class: execute using the current wire condition.
         if (!insideBranch) {
-          executeOutput(node, condition, tags, nowMs);
+          executeOutput(node, condition, tags, deltaMs);
         }
-        // condition stays as-is for power flow visualization
+        nodePowered.set(node.id, condition);
+
+        // Terminal blocks block the wire condition so coil outputs downstream
+        // stay de-energised.  contactCondition is left alone so contacts placed
+        // after the terminal can still evaluate against the upstream chain.
+        // For wire colouring we store contactCondition in nodeOutputPowered so
+        // the segment between the terminal and the next contact shows the
+        // upstream power (green when the pre-terminal contacts are true) rather
+        // than a misleading dark stub.  The actual execution condition remains
+        // false — only the renderer colour is affected.
+        const isTerminal = ["TON","TOF","RTO","CTU","CTD"].includes(node.type);
+        if (isTerminal) {
+          condition = false;
+          // contactCondition intentionally NOT updated so contacts placed after
+          // the terminal still evaluate against the upstream contact chain.
+
+          // Wire colour to the right: show DN bit so the segment between the
+          // terminal and a downstream [XIC T.DN] is dark while timing and turns
+          // green only when the timer/counter is done.
+          const timerTag = tags.get(node.tagName);
+          let dn = false;
+          if (timerTag?.dataType === "TIMER" && timerTag.timerData) {
+            dn = timerTag.timerData.dn;
+          } else if (timerTag?.dataType === "COUNTER" && timerTag.counterData) {
+            dn = timerTag.counterData.dn;
+          }
+          nodeOutputPowered.set(node.id, dn);
+        } else {
+          nodeOutputPowered.set(node.id, condition);
+        }
       }
-      nodePowered.set(node.id, condition);
     } else if (isBranch(node)) {
-      // Evaluate all legs, OR them together
-      condition = evaluateBranch(node, condition, tags, nodePowered, legPowered, nowMs);
+      condition = evaluateBranch(node, condition, tags, nodePowered, nodeOutputPowered, legPowered, deltaMs);
+      contactCondition = condition; // branch result feeds back into contact chain
       nodePowered.set(node.id, condition);
+      nodeOutputPowered.set(node.id, condition);
     }
   }
 
@@ -453,11 +628,10 @@ function evaluateBranch(
   conditionIn: boolean,
   tags: Map<string, TagDefinition>,
   nodePowered: Map<string, boolean>,
+  nodeOutputPowered: Map<string, boolean>,
   legPowered: Map<string, boolean>,
-  nowMs: number
+  deltaMs: number
 ): boolean {
-  // Each leg is evaluated independently from conditionIn.
-  // The branch is TRUE if ANY leg evaluates TRUE.
   let anyTrue = false;
 
   for (const leg of branch.legs) {
@@ -466,8 +640,9 @@ function evaluateBranch(
       conditionIn,
       tags,
       nodePowered,
+      nodeOutputPowered,
       legPowered,
-      nowMs,
+      deltaMs,
       true
     );
     legPowered.set(leg.id, legResult);
@@ -484,26 +659,28 @@ function evaluateBranch(
 function evaluateRung(
   rung: Rung,
   tags: Map<string, TagDefinition>,
-  nowMs: number
+  deltaMs: number
 ): RungPowerState {
-  const nodePowered = new Map<string, boolean>();
-  const legPowered = new Map<string, boolean>();
+  const nodePowered       = new Map<string, boolean>();
+  const nodeOutputPowered = new Map<string, boolean>();
+  const legPowered        = new Map<string, boolean>();
 
   if (rung.disabled) {
-    return { rungId: rung.id, rungPowered: false, nodePowered, legPowered };
+    return { rungId: rung.id, rungPowered: false, nodePowered, nodeOutputPowered, legPowered };
   }
 
   const rungPowered = evaluateSeries(
     rung.nodes,
-    true, // power always starts true at the left rail
+    true,
     tags,
     nodePowered,
+    nodeOutputPowered,
     legPowered,
-    nowMs,
+    deltaMs,
     false
   );
 
-  return { rungId: rung.id, rungPowered, nodePowered, legPowered };
+  return { rungId: rung.id, rungPowered, nodePowered, nodeOutputPowered, legPowered };
 }
 
 // ---------------------------------------------------------------------------
@@ -516,18 +693,19 @@ function evaluateRung(
  * @param routine   The routine to scan.
  * @param tagMap    Mutable map of tag name → TagDefinition.
  *                  Tag values ARE mutated in place by output instructions.
- * @param nowMs     Current time in ms (for timer evaluation).
+ * @param deltaMs   Time elapsed since the previous scan (ms).
+ *                  Timers accumulate this amount per scan.
  * @returns         ScanResult map of rungId → RungPowerState.
  */
 export function executeScan(
   routine: Routine,
   tagMap: Map<string, TagDefinition>,
-  nowMs: number
+  deltaMs: number
 ): ScanResult {
   const result: ScanResult = new Map();
 
   for (const rung of routine.rungs) {
-    const state = evaluateRung(rung, tagMap, nowMs);
+    const state = evaluateRung(rung, tagMap, deltaMs);
     result.set(rung.id, state);
   }
 

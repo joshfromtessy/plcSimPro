@@ -86,7 +86,9 @@ export const useSimulationStore = create<SimulationState>()((set, get) => ({
     if (!activeRoutine) return;
 
     const t0 = performance.now();
-    const nowMs = Date.now();
+    // Pass the configured scan interval as deltaMs so timers accumulate
+    // exactly that many ms per scan — predictable and spec-correct.
+    const deltaMs = get().scanIntervalMs;
 
     // Build a mutable tag map for this scan
     // Note: immer-managed tags are frozen, so we deep-copy them
@@ -94,7 +96,7 @@ export const useSimulationStore = create<SimulationState>()((set, get) => ({
     const tagMap = buildTagMap(tagsCopy);
 
     // Execute scan
-    const result = executeScan(activeRoutine, tagMap, nowMs);
+    const result = executeScan(activeRoutine, tagMap, deltaMs);
 
     // Write back tag values that changed
     // (We update the project store directly; immer handles immutability)
@@ -110,12 +112,13 @@ export const useSimulationStore = create<SimulationState>()((set, get) => ({
         JSON.stringify(updatedTag.counterData) !== JSON.stringify(original.counterData);
 
       if (changed) {
-        // Use the store's setTagValue for BOOL tags; for structured types we need
-        // a direct update — handled via a dedicated internal action
         if (updatedTag.dataType === "BOOL") {
           ps.setTagValue(updatedTag.name, updatedTag.value);
+        } else if (updatedTag.dataType === "DINT" || updatedTag.dataType === "INT" || updatedTag.dataType === "REAL") {
+          // Scalar or array numeric tag — write value directly
+          ps.setTagValue(updatedTag.name, updatedTag.value);
         } else {
-          // For TIMER/COUNTER, sync the structured data
+          // TIMER / COUNTER — sync structured data
           _syncTagData(updatedTag);
         }
       }

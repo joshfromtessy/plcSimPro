@@ -8,7 +8,7 @@ import { useProjectStore } from "../store/projectStore";
 import { useSimulationStore } from "../store/simulationStore";
 import { useEditorStore } from "../store/editorStore";
 import { LadderRenderer } from "./renderer";
-import type { InstructionType, InsertPosition, Rung, TagDataType, TimerParams, CounterParams } from "../model/types";
+import type { InstructionType, InsertPosition, Rung, TagDataType, TimerParams, CounterParams, CompareParams, MoveParams } from "../model/types";
 import { isCoilOutput } from "../model/types";
 import {
   findContainingBranch, isBranch,
@@ -46,6 +46,7 @@ export function PixiCanvas() {
   const { selection, drag, showNodeComments, showRungComments, toggleNodeComments, toggleRungComments } = useEditorStore();
   const [tagEditor, setTagEditor] = useState<TagEditorState | null>(null);
   const [complexEditor, setComplexEditor] = useState<TagEditorState | null>(null);
+  const [compareMovEditor, setCompareMovEditor] = useState<TagEditorState | null>(null);
   const [rungCommentEditor, setRungCommentEditor] = useState<TagEditorState | null>(null);
 
   // Stores the current drag-over drop position â€” use a ref to avoid re-renders
@@ -214,6 +215,7 @@ export function PixiCanvas() {
 
       if (e.key === "Escape") {
         setTagEditor(null);
+        setCompareMovEditor(null);
         useEditorStore.getState().clearSelection();
         return;
       }
@@ -855,13 +857,21 @@ export function PixiCanvas() {
       const editorState: TagEditorState = { rungId: hit.rungId, nodeId: hit.nodeId, x: editorX, y: editorY };
       useEditorStore.getState().setSelection({ kind: "node", rungId: hit.rungId, nodeId: hit.nodeId });
       const isTimerCounter = ["TON","TOF","RTO","CTU","CTD"].includes(node.type);
+      const isCompareMov   = ["EQU","NEQ","LES","LEQ","GRT","GEQ","MOV","MVM"].includes(node.type);
       if (isTimerCounter) {
         setComplexEditor(editorState);
         setTagEditor(null);
+        setCompareMovEditor(null);
+        setRungCommentEditor(null);
+      } else if (isCompareMov) {
+        setCompareMovEditor(editorState);
+        setTagEditor(null);
+        setComplexEditor(null);
         setRungCommentEditor(null);
       } else {
         setTagEditor(editorState);
         setComplexEditor(null);
+        setCompareMovEditor(null);
         setRungCommentEditor(null);
       }
       return;
@@ -943,6 +953,14 @@ export function PixiCanvas() {
           editor={complexEditor}
           routineId={routine.id}
           onClose={() => setComplexEditor(null)}
+        />
+      )}
+
+      {compareMovEditor && (
+        <CompareMovEditor
+          editor={compareMovEditor}
+          routineId={routine.id}
+          onClose={() => setCompareMovEditor(null)}
         />
       )}
 
@@ -1359,6 +1377,176 @@ function ComplexParamEditor({ editor, routineId, onClose }: {
         onChange={e => setComment(e.target.value)}
         onKeyDown={handleKeyDown}
       />
+
+      <button
+        type="button"
+        style={{
+          margin: "6px 8px 4px",
+          padding: "4px 10px",
+          background: "var(--accent-blue-bg)",
+          color: "var(--accent-blue)",
+          border: "1px solid var(--accent-blue)",
+          borderRadius: 3,
+          fontSize: 11,
+          cursor: "pointer",
+          width: "calc(100% - 16px)",
+        }}
+        onClick={commit}
+      >
+        Apply
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Compare / Move operand editor  (double-click on EQU/NEQ/… / MOV/MVM)
+// ---------------------------------------------------------------------------
+
+const COMPARE_MOVE_TYPES = new Set(["EQU","NEQ","LES","LEQ","GRT","GEQ","MOV","MVM"]);
+
+function CompareMovEditor({ editor, routineId, onClose }: {
+  editor: TagEditorState;
+  routineId: string;
+  onClose: () => void;
+}) {
+  const { project, setInstructionParams, addTag } = useProjectStore();
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const routine = project.programs.flatMap(p => p.routines).find(r => r.id === routineId);
+  const rung    = routine?.rungs.find(r => r.id === editor.rungId);
+  const node    = rung ? findNodeById(rung.nodes, editor.nodeId) : null;
+  if (!node || node.kind !== "instruction") return null;
+
+  const isMovInst = node.type === "MOV" || node.type === "MVM";
+  const isMVM     = node.type === "MVM";
+  const cp = node.params as CompareParams;
+  const mp = node.params as MoveParams;
+
+  const [fieldA, setFieldA] = useState(isMovInst ? (mp.source ?? "") : (cp.sourceA ?? ""));
+  const [fieldB, setFieldB] = useState(isMovInst ? (mp.dest   ?? "") : (cp.sourceB ?? ""));
+  const [fieldMask, setFieldMask] = useState(isMVM ? ((node.params as MoveParams).mask ?? "0xFFFFFFFF") : "");
+
+  // All numeric tags for autocomplete
+  const numericTags = project.tags.filter(t =>
+    t.dataType === "DINT" || t.dataType === "INT" || t.dataType === "REAL" || t.dataType === "BOOL"
+  );
+
+  useEffect(() => {
+    function handlePointerDown(e: PointerEvent) {
+      if (!panelRef.current?.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [onClose]);
+
+  function suggestionsFor(val: string) {
+    const lower = val.trim().toLowerCase();
+    if (/^-?[\d.]/.test(lower) || /^0x/i.test(lower)) return [];
+    if (!lower) return numericTags.slice(0, 6);
+    return numericTags
+      .filter(t => t.name.toLowerCase().includes(lower))
+      .slice(0, 6);
+  }
+
+  function commit() {
+    const a = fieldA.trim();
+    const b = fieldB.trim();
+    const mask = fieldMask.trim();
+
+    if (isMovInst) {
+      // Auto-create dest tag if it looks like a tag name and doesn't exist
+      const destIsLiteral = !isNaN(Number(b)) || /^0x/i.test(b);
+      if (!destIsLiteral && b && !project.tags.find(t => t.name === b)) {
+        addTag(b, "DINT");
+      }
+      const patch: Partial<MoveParams> = { source: a, dest: b };
+      if (isMVM) patch.mask = mask || "0xFFFFFFFF";
+      setInstructionParams(routineId, editor.rungId, editor.nodeId, patch as any);
+    } else {
+      setInstructionParams(routineId, editor.rungId, editor.nodeId,
+        { sourceA: a, sourceB: b } as any);
+    }
+    onClose();
+  }
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === "Escape") { e.preventDefault(); onClose(); }
+    if (e.key === "Enter")  { e.preventDefault(); commit(); }
+  }
+
+  const labelA = isMovInst ? "Source"      : "Source A";
+  const labelB = isMovInst ? "Destination" : "Source B";
+  const hintA  = isMovInst ? "tag or literal" : "tag or literal";
+  const hintB  = isMovInst ? "tag name"        : "tag or literal";
+
+  const sugA = suggestionsFor(fieldA);
+  const sugB = suggestionsFor(fieldB);
+
+  return (
+    <div
+      ref={panelRef}
+      className="tag-quick-edit"
+      style={{ left: editor.x, top: editor.y, minWidth: 210 }}
+      onPointerDown={e => e.stopPropagation()}
+    >
+      <div className="tag-quick-edit-head">
+        <span>{node.type}</span>
+        <button type="button" onClick={onClose}>x</button>
+      </div>
+
+      {/* Field A */}
+      <label className="tag-quick-edit-type"><span>{labelA}</span></label>
+      <input
+        autoFocus
+        className="tag-quick-edit-input"
+        value={fieldA}
+        placeholder={hintA}
+        onChange={e => setFieldA(e.target.value)}
+        onKeyDown={handleKey}
+      />
+      {sugA.length > 0 && (
+        <div className="tag-quick-edit-list">
+          {sugA.map(t => (
+            <button key={t.id} type="button" onClick={() => setFieldA(t.name)}>
+              <span>{t.name}</span><em>{t.dataType}</em>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Field B */}
+      <label className="tag-quick-edit-type" style={{ marginTop: 6 }}><span>{labelB}</span></label>
+      <input
+        className="tag-quick-edit-input"
+        value={fieldB}
+        placeholder={hintB}
+        onChange={e => setFieldB(e.target.value)}
+        onKeyDown={handleKey}
+      />
+      {sugB.length > 0 && (
+        <div className="tag-quick-edit-list">
+          {sugB.map(t => (
+            <button key={t.id} type="button" onClick={() => setFieldB(t.name)}>
+              <span>{t.name}</span><em>{t.dataType}</em>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Mask field for MVM */}
+      {isMVM && (
+        <>
+          <label className="tag-quick-edit-type" style={{ marginTop: 6 }}><span>Mask</span></label>
+          <input
+            className="tag-quick-edit-input"
+            value={fieldMask}
+            placeholder="0xFFFFFFFF or tag"
+            onChange={e => setFieldMask(e.target.value)}
+            onKeyDown={handleKey}
+          />
+        </>
+      )}
 
       <button
         type="button"

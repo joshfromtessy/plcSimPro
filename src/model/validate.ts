@@ -83,9 +83,11 @@ function isInsideBranch(rung: Rung, nodeId: string): boolean {
 function isKnownType(type: InstructionType): boolean {
   const known: InstructionType[] = [
     "XIC","XIO","OSR","OSF","ONS",
+    "EQU","NEQ","LES","LEQ","GRT","GEQ",
     "OTE","OTL","OTU",
     "TON","TOF","RTO",
     "CTU","CTD","RES",
+    "MOV","MVM",
   ];
   return known.includes(type);
 }
@@ -129,44 +131,16 @@ export function validateInsert(
     }
 
     case "series-before": {
-      // Check sibling exists
       if (!findNodeInRung(rung, position.siblingId)) {
         return err(`Target node '${position.siblingId}' not found in rung.`);
       }
-
-      if (isOut) {
-        if (isInsideBranch(rung, position.siblingId)) {
-          return err("Cannot insert output inside a branch leg.");
-        }
-        if (!isTopLevelOutput(rung, position.siblingId)) {
-          return err("Output instructions must be placed in the rung output section.");
-        }
-      }
-
       return ok();
     }
 
     case "series-after": {
-      const sibling = findNodeInRung(rung, position.siblingId);
-      if (!sibling) {
+      if (!findNodeInRung(rung, position.siblingId)) {
         return err(`Target node '${position.siblingId}' not found in rung.`);
       }
-
-      const siblingIdx = topLevelIndex(rung, position.siblingId);
-      const firstOutputIdx = firstTopLevelOutputIndex(rung);
-
-      if (isOut && (siblingIdx === -1 || isInsideBranch(rung, position.siblingId))) {
-        return err("Cannot insert output after a node inside a branch leg.");
-      }
-
-      if (isOut && firstOutputIdx === -1 && siblingIdx !== rung.nodes.length - 1) {
-        return err("Output instructions must be placed in the rung output section.");
-      }
-
-      if (isOut && firstOutputIdx !== -1 && siblingIdx + 1 < firstOutputIdx) {
-        return err("Output instructions must be placed in the rung output section.");
-      }
-
       return ok();
     }
 
@@ -177,11 +151,6 @@ export function validateInsert(
     case "branch-leg-before":
     case "branch-leg-after":
     case "branch-leg-append": {
-      // Coil outputs are never allowed inside branch legs
-      if (isOut) {
-        return err("Output instructions cannot be placed inside a branch leg.");
-      }
-
       const branch = findBranchInRung(rung, position.branchId);
       if (!branch) {
         return err(`Branch '${position.branchId}' not found in rung.`);
@@ -213,18 +182,9 @@ export function validateInsert(
     case "branch-wrap": {
       // Wrapping creates a new branch around an existing node.
       // The new node goes in the second leg.
-      if (isOut) {
-        return err("Cannot create a branch containing an output instruction.");
-      }
-
       const target = findNodeInRung(rung, position.nodeId);
       if (!target) {
         return err(`Node '${position.nodeId}' not found.`);
-      }
-
-      // Cannot wrap a coil output instruction
-      if (isInstruction(target) && isCoilOutput(target.type)) {
-        return err("Cannot branch around an output instruction.");
       }
 
       // Depth check: wrapping adds one level
@@ -238,12 +198,6 @@ export function validateInsert(
 
     case "branch-add-leg": {
       // Adding a leg to an existing branch — the new leg starts empty.
-      // The instruction type here is informational (it describes what will go IN the leg),
-      // but the leg itself starts empty, so we just check the branch exists.
-      if (isOut) {
-        return err("Output instructions cannot be placed inside a branch leg.");
-      }
-
       const branch = findBranchInRung(rung, position.branchId);
       if (!branch) {
         return err(`Branch '${position.branchId}' not found.`);
@@ -402,19 +356,13 @@ export function validateRungIntegrity(rung: Rung): ValidationResult {
 
 function checkSeriesIntegrity(
   nodes: SeriesNode[],
-  insideBranch: boolean,
+  _insideBranch: boolean,
   context: string
 ): ValidationResult {
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
 
-    if (isInstruction(node)) {
-      if (isCoilOutput(node.type)) {
-        if (insideBranch) {
-          return err(`Output '${node.type}' found inside a branch leg (context: ${context}). This is not allowed.`);
-        }
-      }
-    } else if (isBranch(node)) {
+    if (isBranch(node)) {
       if (node.legs.length < 2) {
         return err(`Branch '${node.id}' has fewer than 2 legs — invalid structure.`);
       }
