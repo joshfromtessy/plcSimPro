@@ -676,7 +676,13 @@ export const useProjectStore = create<ProjectState>()(
           if (!routine) return;
           const rung = findRung(routine, rungId);
           if (!rung) return;
+          const node = findInstructionNode(rung.nodes, nodeId);
           patchNodeParams(rung.nodes, nodeId, patch);
+          if (patch.preset !== undefined && patch.presetTag === "" && node?.tagName) {
+            const tag = s.project.tags.find(t => t.name === node.tagName);
+            if (tag?.dataType === "TIMER" && tag.timerData) tag.timerData.preset = Math.max(0, patch.preset | 0);
+            if (tag?.dataType === "COUNTER" && tag.counterData) tag.counterData.preset = patch.preset | 0;
+          }
         }),
 
       assignTag: (routineId, rungId, nodeId, tagName) => {
@@ -856,7 +862,7 @@ function patchNodeParams(
 ): boolean {
   for (const node of nodes) {
     if (node.kind === "instruction" && node.id === nodeId) {
-      node.params = { ...node.params, ...patch };
+      node.params = { ...node.params, ...patch } as InstructionParams;
       // Explicitly clear presetTag when set to empty string
       if (patch.presetTag === "") delete (node.params as any).presetTag;
       return true;

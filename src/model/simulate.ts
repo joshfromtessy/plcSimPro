@@ -240,6 +240,28 @@ function readTagNumber(tagName: string, tags: Map<string, TagDefinition>): numbe
     if (ref.bit !== undefined) return ((word >> ref.bit) & 1);
     return word;
   }
+  if (tag.dataType === "TIMER" && tag.timerData && ref.member) {
+    const td = tag.timerData;
+    switch (ref.member) {
+      case "PRE": return td.preset;
+      case "ACC": return td.accum;
+      case "EN": return td.en ? 1 : 0;
+      case "TT": return td.tt ? 1 : 0;
+      case "DN": return td.dn ? 1 : 0;
+    }
+  }
+  if (tag.dataType === "COUNTER" && tag.counterData && ref.member) {
+    const cd = tag.counterData;
+    switch (ref.member) {
+      case "PRE": return cd.preset;
+      case "ACC": return cd.accum;
+      case "CU": return cd.cu ? 1 : 0;
+      case "CD": return cd.cd ? 1 : 0;
+      case "DN": return cd.dn ? 1 : 0;
+      case "OV": return cd.ov ? 1 : 0;
+      case "UN": return cd.un ? 1 : 0;
+    }
+  }
   return 0;
 }
 
@@ -262,6 +284,26 @@ function writeTagNumber(tagName: string, value: number, tags: Map<string, TagDef
     } else {
       setWordValue(tag, ref.idx, value | 0);
     }
+  } else if (tag.dataType === "TIMER" && tag.timerData && ref.member) {
+    const td = tag.timerData;
+    const next = Math.max(0, value | 0);
+    if (ref.member === "PRE") td.preset = next;
+    if (ref.member === "ACC") {
+      td.accum = Math.min(next, td.preset);
+      td.dn = td.accum >= td.preset;
+      td.tt = td.en && !td.dn;
+    }
+  } else if (tag.dataType === "COUNTER" && tag.counterData && ref.member) {
+    const cd = tag.counterData;
+    const next = value | 0;
+    if (ref.member === "PRE") {
+      cd.preset = next;
+      cd.dn = cd.accum >= cd.preset;
+    }
+    if (ref.member === "ACC") {
+      cd.accum = next;
+      cd.dn = cd.accum >= cd.preset;
+    }
   }
 }
 
@@ -272,17 +314,14 @@ function writeTagNumber(tagName: string, value: number, tags: Map<string, TagDef
 function resolvePreset(
   params: InstructionParams,
   tags: Map<string, TagDefinition>,
-  defaultMs: number
+  defaultValue: number,
+  currentPreset?: number
 ): number {
   const p = params as TimerParams | CounterParams;
   if (p?.presetTag) {
-    const parsed = parseTagRef(p.presetTag);
-    const ref = tags.get(parsed.base);
-    if (ref && (ref.dataType === "DINT" || ref.dataType === "INT")) {
-      return getWordValue(ref, parsed.idx);
-    }
+    return readTagNumber(p.presetTag, tags);
   }
-  return (p?.preset as number | undefined) ?? defaultMs;
+  return currentPreset ?? (p?.preset as number | undefined) ?? defaultValue;
 }
 
 // ---------------------------------------------------------------------------
@@ -360,7 +399,7 @@ function executeOutput(
       const tag = tags.get(node.tagName);
       if (!tag || tag.dataType !== "TIMER") break;
       const td = tag.timerData!;
-      const preset = resolvePreset(node.params, tags, 1000);
+      const preset = resolvePreset(node.params, tags, 1000, td.preset);
       td.preset = preset;
 
       if (conditionIn) {
@@ -390,7 +429,7 @@ function executeOutput(
       const tag = tags.get(node.tagName);
       if (!tag || tag.dataType !== "TIMER") break;
       const td = tag.timerData!;
-      const preset = resolvePreset(node.params, tags, 1000);
+      const preset = resolvePreset(node.params, tags, 1000, td.preset);
       td.preset = preset;
 
       if (conditionIn) {
@@ -422,7 +461,7 @@ function executeOutput(
       const tag = tags.get(node.tagName);
       if (!tag || tag.dataType !== "TIMER") break;
       const td = tag.timerData!;
-      const preset = resolvePreset(node.params, tags, 1000);
+      const preset = resolvePreset(node.params, tags, 1000, td.preset);
       td.preset = preset;
 
       if (conditionIn) {
@@ -450,7 +489,7 @@ function executeOutput(
       const tag = tags.get(node.tagName);
       if (!tag || tag.dataType !== "COUNTER") break;
       const cd = tag.counterData!;
-      const preset = resolvePreset(node.params, tags, 10);
+      const preset = resolvePreset(node.params, tags, 10, cd.preset);
       cd.preset = preset;
 
       if (conditionIn && !cd.cu) {
@@ -469,7 +508,7 @@ function executeOutput(
       const tag = tags.get(node.tagName);
       if (!tag || tag.dataType !== "COUNTER") break;
       const cd = tag.counterData!;
-      const preset = resolvePreset(node.params, tags, 10);
+      const preset = resolvePreset(node.params, tags, 10, cd.preset);
       cd.preset = preset;
 
       if (conditionIn && !cd.cd) {
@@ -536,7 +575,7 @@ function evaluateSeries(
   nodeOutputPowered: Map<string, boolean>,
   legPowered: Map<string, boolean>,
   deltaMs: number,
-  insideBranch: boolean
+  _insideBranch: boolean
 ): boolean {
   // Two-condition model:
   //   condition        — the live wire value flowing right; terminal blocks
@@ -577,38 +616,26 @@ function evaluateSeries(
         nodePowered.set(node.id, condition);
         nodeOutputPowered.set(node.id, condition);
       } else {
-        // Output-class: execute using the current wire condition.
-        if (!insideBranch) {
-          executeOutput(node, condition, tags, deltaMs);
-        }
+        // Output-class: execute using the current wire condition. Outputs in
+        // branch legs are valid parallel output paths, so they execute too.
+        executeOutput(node, condition, tags, deltaMs);
         nodePowered.set(node.id, condition);
 
         // Terminal blocks block the wire condition so coil outputs downstream
         // stay de-energised.  contactCondition is left alone so contacts placed
         // after the terminal can still evaluate against the upstream chain.
-        // For wire colouring we store contactCondition in nodeOutputPowered so
-        // the segment between the terminal and the next contact shows the
-        // upstream power (green when the pre-terminal contacts are true) rather
-        // than a misleading dark stub.  The actual execution condition remains
-        // false — only the renderer colour is affected.
         const isTerminal = ["TON","TOF","RTO","CTU","CTD"].includes(node.type);
         if (isTerminal) {
           condition = false;
           // contactCondition intentionally NOT updated so contacts placed after
           // the terminal still evaluate against the upstream contact chain.
 
-          // Wire colour to the right: show DN bit so the segment between the
-          // terminal and a downstream [XIC T.DN] is dark while timing and turns
-          // green only when the timer/counter is done.
-          const timerTag = tags.get(node.tagName);
-          let dn = false;
-          if (timerTag?.dataType === "TIMER" && timerTag.timerData) {
-            dn = timerTag.timerData.dn;
-          } else if (timerTag?.dataType === "COUNTER" && timerTag.counterData) {
-            dn = timerTag.counterData.dn;
-          }
-          nodeOutputPowered.set(node.id, dn);
+          // A terminal instruction never energizes the wire to its right by
+          // itself. Add an explicit [XIC Timer.DN] / [XIC Counter.DN] after it
+          // when the done bit should drive downstream logic and wire color.
+          nodeOutputPowered.set(node.id, false);
         } else {
+          contactCondition = condition;
           nodeOutputPowered.set(node.id, condition);
         }
       }

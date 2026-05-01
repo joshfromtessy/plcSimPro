@@ -51,7 +51,7 @@ export const useSimulationStore = create<SimulationState>()((set, get) => ({
       clearInterval(_loopHandle);
       _loopHandle = null;
     }
-    set({ mode: "stopped" });
+    set({ mode: "stopped", scanResult: new Map() });
   },
 
   singleScan: () => {
@@ -61,7 +61,7 @@ export const useSimulationStore = create<SimulationState>()((set, get) => ({
     }
     set({ mode: "single-scan" });
     get()._tick();
-    set({ mode: "stopped" });
+    set({ mode: "stopped", scanResult: new Map() });
   },
 
   setScanInterval: (ms) => {

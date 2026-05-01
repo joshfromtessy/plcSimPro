@@ -9,7 +9,6 @@ import { useSimulationStore } from "../store/simulationStore";
 import { useEditorStore } from "../store/editorStore";
 import { LadderRenderer } from "./renderer";
 import type { InstructionType, InsertPosition, Rung, TagDataType, TimerParams, CounterParams, CompareParams, MoveParams } from "../model/types";
-import { isCoilOutput } from "../model/types";
 import {
   findContainingBranch, isBranch,
   applyInsert, applyDelete,
@@ -604,6 +603,7 @@ export function PixiCanvas() {
     rungDragRef.current = null;
     if (canvasRef.current) canvasRef.current.draggable = false;
     rendererRef.current?.clearDropZone();
+    rendererRef.current?.clearDropAnchors();
     rendererRef.current?.clearExtendTarget();
     rendererRef.current?.clearRungDropLine();
   }
@@ -635,6 +635,7 @@ export function PixiCanvas() {
         if (drop) rendererRef.current?.showRungDropLine(drop.lineY);
       }
       rendererRef.current?.clearDropZone();
+      rendererRef.current?.clearDropAnchors();
       rendererRef.current?.clearExtendTarget();
       return;
     }
@@ -671,6 +672,7 @@ export function PixiCanvas() {
       }
 
       lr?.clearDropZone();
+      lr?.clearDropAnchors();
       return;
     }
 
@@ -681,8 +683,9 @@ export function PixiCanvas() {
         ? findNodeById(routine.rungs.find(r => r.id === hit.rungId)?.nodes ?? [], hit.nodeId)
         : null;
       rendererRef.current?.clearDropZone();
+      rendererRef.current?.clearDropAnchors();
       rendererRef.current?.clearExtendTarget();
-      if (hit && target?.kind === "instruction" && !isCoilOutput(target.type)) {
+      if (hit && target?.kind === "instruction") {
         rendererRef.current?.showInstructionHover(hit.rungId, hit.nodeId);
       } else {
         rendererRef.current?.clearLegHover();
@@ -696,6 +699,7 @@ export function PixiCanvas() {
       const rung = hit && routine ? routine.rungs.find(r => r.id === hit.rungId) : null;
       const branchId = hit && rung ? resolveBranchTarget(rung, hit.nodeId) : null;
       rendererRef.current?.clearDropZone();
+      rendererRef.current?.clearDropAnchors();
       rendererRef.current?.clearExtendTarget();
       if (hit && branchId) {
         rendererRef.current?.showInstructionHover(hit.rungId, branchId);
@@ -710,6 +714,7 @@ export function PixiCanvas() {
       : e.dataTransfer.getData("application/plc-instruction") as InstructionType | "";
     const info = getDropInfo(e, paletteType || undefined);
     dropTargetRef.current = info?.position ?? null;
+    rendererRef.current?.showDropAnchors(paletteType || undefined);
     rendererRef.current?.showDropZone(info);
     rendererRef.current?.clearExtendTarget();
   }
@@ -721,6 +726,7 @@ export function PixiCanvas() {
     if (wrap && wrap.contains(e.relatedTarget as Node)) return;
     dropTargetRef.current = null;
     rendererRef.current?.clearDropZone();
+    rendererRef.current?.clearDropAnchors();
     rendererRef.current?.clearExtendTarget();
     rendererRef.current?.clearLegHover();
     rendererRef.current?.clearRungDropLine();
@@ -729,6 +735,7 @@ export function PixiCanvas() {
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     rendererRef.current?.clearDropZone();
+    rendererRef.current?.clearDropAnchors();
     rendererRef.current?.clearExtendTarget();
     rendererRef.current?.clearRungDropLine();
     dragNodeRef.current = null;
@@ -779,7 +786,7 @@ export function PixiCanvas() {
       const hit = coords ? rendererRef.current?.hitTestNode(coords.x, coords.y) : null;
       const rung = hit ? routine.rungs.find(r => r.id === hit.rungId) : null;
       const target = hit && rung ? findNodeById(rung.nodes, hit.nodeId) : null;
-      if (hit && target?.kind === "instruction" && !isCoilOutput(target.type)) {
+      if (hit && target?.kind === "instruction") {
         wrapNodeInBranch(routine.id, hit.rungId, hit.nodeId);
       }
       return;
@@ -1427,10 +1434,29 @@ function CompareMovEditor({ editor, routineId, onClose }: {
   const [fieldB, setFieldB] = useState(isMovInst ? (mp.dest   ?? "") : (cp.sourceB ?? ""));
   const [fieldMask, setFieldMask] = useState(isMVM ? ((node.params as MoveParams).mask ?? "0xFFFFFFFF") : "");
 
-  // All numeric tags for autocomplete
-  const numericTags = project.tags.filter(t =>
-    t.dataType === "DINT" || t.dataType === "INT" || t.dataType === "REAL" || t.dataType === "BOOL"
-  );
+  type OperandSuggestion = { id: string; name: string; dataType: string };
+
+  const numericTags: OperandSuggestion[] = project.tags
+    .filter(t => t.dataType === "DINT" || t.dataType === "INT" || t.dataType === "REAL" || t.dataType === "BOOL")
+    .map(t => ({ id: t.id, name: t.name, dataType: t.dataType }));
+
+  const structuredNumericTags: OperandSuggestion[] = project.tags.flatMap(t => {
+    if (t.dataType === "TIMER") {
+      return [
+        { id: `${t.id}:PRE`, name: `${t.name}.PRE`, dataType: "TIMER" },
+        { id: `${t.id}:ACC`, name: `${t.name}.ACC`, dataType: "TIMER" },
+      ];
+    }
+    if (t.dataType === "COUNTER") {
+      return [
+        { id: `${t.id}:PRE`, name: `${t.name}.PRE`, dataType: "COUNTER" },
+        { id: `${t.id}:ACC`, name: `${t.name}.ACC`, dataType: "COUNTER" },
+      ];
+    }
+    return [];
+  });
+
+  const operandTags = [...numericTags, ...structuredNumericTags];
 
   useEffect(() => {
     function handlePointerDown(e: PointerEvent) {
@@ -1443,21 +1469,35 @@ function CompareMovEditor({ editor, routineId, onClose }: {
   function suggestionsFor(val: string) {
     const lower = val.trim().toLowerCase();
     if (/^-?[\d.]/.test(lower) || /^0x/i.test(lower)) return [];
-    if (!lower) return numericTags.slice(0, 6);
-    return numericTags
+    if (!lower) return operandTags.slice(0, 8);
+    return operandTags
       .filter(t => t.name.toLowerCase().includes(lower))
-      .slice(0, 6);
+      .slice(0, 8);
+  }
+
+  function normalizeOperandRef(value: string): string {
+    const trimmed = value.trim();
+    const match = trimmed.match(/^([A-Za-z_]\w*)(\.(pre|acc|en|tt|dn|cu|cd|ov|un))$/i);
+    if (!match) return trimmed;
+    return `${match[1]}.${match[3].toUpperCase()}`;
+  }
+
+  function isExistingStructuredRef(value: string): boolean {
+    const match = value.trim().match(/^([A-Za-z_]\w*)\.(PRE|ACC|EN|TT|DN|CU|CD|OV|UN)$/i);
+    if (!match) return false;
+    const base = project.tags.find(t => t.name.toLowerCase() === match[1].toLowerCase());
+    return base?.dataType === "TIMER" || base?.dataType === "COUNTER";
   }
 
   function commit() {
-    const a = fieldA.trim();
-    const b = fieldB.trim();
-    const mask = fieldMask.trim();
+    const a = normalizeOperandRef(fieldA);
+    const b = normalizeOperandRef(fieldB);
+    const mask = normalizeOperandRef(fieldMask);
 
     if (isMovInst) {
       // Auto-create dest tag if it looks like a tag name and doesn't exist
       const destIsLiteral = !isNaN(Number(b)) || /^0x/i.test(b);
-      if (!destIsLiteral && b && !project.tags.find(t => t.name === b)) {
+      if (!destIsLiteral && b && !isExistingStructuredRef(b) && !project.tags.find(t => t.name === b)) {
         addTag(b, "DINT");
       }
       const patch: Partial<MoveParams> = { source: a, dest: b };

@@ -154,6 +154,8 @@ export class LadderRenderer {
 
   /** Overlay graphics for drag-drop insertion indicator */
   private _dropGfx: Graphics;
+  /** Overlay graphics for all possible insertion anchors during drag. */
+  private _dropDotsGfx: Graphics;
   /** Overlay graphics for branch-extend preview (teal box around absorbed node) */
   private _extendGfx: Graphics;
   /** Overlay graphics for live branch-resize preview tint */
@@ -180,6 +182,10 @@ export class LadderRenderer {
     this._dropGfx = new Graphics();
     this._dropGfx.eventMode = "none";
     this._stage.addChild(this._dropGfx);
+
+    this._dropDotsGfx = new Graphics();
+    this._dropDotsGfx.eventMode = "none";
+    this._stage.addChild(this._dropDotsGfx);
 
     // Branch-extend preview overlay (teal box around the node that would be absorbed)
     this._extendGfx = new Graphics();
@@ -329,6 +335,7 @@ export class LadderRenderer {
     this._drawBackground(totalH, rightRailX, separatorYs);
 
     // Keep overlays on top of all rung containers (addChild re-orders to end).
+    this._stage.addChild(this._dropDotsGfx);
     this._stage.addChild(this._dropGfx);
     this._stage.addChild(this._extendGfx);
     this._stage.addChild(this._hoverGfx);
@@ -426,8 +433,11 @@ export class LadderRenderer {
       // Subsequent nodes: energised only if the previous node passed power through.
       const inputPowered = i === 0
         ? power !== null
-        : this._outPw(power, layout.nodes[i - 1].nodeId);
-      this._drawNode(g, rr.container, layout.nodes[i], rung, power, inputPowered);
+        : this._wireBetweenPw(power, rung.nodes, layout.nodes[i - 1], layout.nodes[i]);
+      const visualOutPowered = i < layout.nodes.length - 1
+        ? this._wireBetweenPw(power, rung.nodes, layout.nodes[i], layout.nodes[i + 1])
+        : undefined;
+      this._drawNode(g, rr.container, layout.nodes[i], rung, power, inputPowered, visualOutPowered);
     }
 
     // Fold-wrap continuation arrows (no-op for single-band rungs)
@@ -558,7 +568,7 @@ export class LadderRenderer {
         for (let i = 0; i < bandNodes.length - 1; i++) {
           const cur  = bandNodes[i];
           const next = bandNodes[i + 1];
-          const pw   = this._outPw(power, cur.nodeId);
+          const pw   = this._wireBetweenPw(power, nodes, cur, next);
           this._seg(g, cur.x + cur.w, next.x, wireY, pw);
         }
 
@@ -592,7 +602,7 @@ export class LadderRenderer {
     for (let i = 0; i < layout.nodes.length - 1; i++) {
       const cur  = layout.nodes[i];
       const next = layout.nodes[i + 1];
-      const pw   = this._outPw(power, cur.nodeId);
+      const pw   = this._wireBetweenPw(power, nodes, cur, next);
       this._seg(g, cur.x + cur.w, next.x, wireY, pw);
     }
 
@@ -664,6 +674,26 @@ export class LadderRenderer {
     return power.nodePowered.get(nodeId) ?? false;
   }
 
+  private _wireBetweenPw(
+    power: RungPowerState | null,
+    astNodes: SeriesNode[],
+    cur: LayoutNode,
+    next: LayoutNode
+  ): boolean {
+    const curAst = this._findAstInstruction(astNodes, cur.nodeId);
+    const nextAst = this._findAstInstruction(astNodes, next.nodeId);
+    if (curAst && nextAst && this._isTerminalDoneContact(curAst, nextAst)) {
+      return power?.nodePowered.get(next.nodeId) ?? false;
+    }
+    return this._outPw(power, cur.nodeId);
+  }
+
+  private _isTerminalDoneContact(cur: InstructionNode, next: InstructionNode): boolean {
+    const terminalTypes = new Set(["TON", "TOF", "RTO", "CTU", "CTD"]);
+    if (!terminalTypes.has(cur.type) || next.type !== "XIC" || !cur.tagName) return false;
+    return next.tagName.trim().toUpperCase() === `${cur.tagName.trim()}.DN`.toUpperCase();
+  }
+
   private _seg(g: Graphics, x1: number, x2: number, y: number, powered: boolean) {
     if (x2 <= x1) return;
     g.moveTo(x1, y).lineTo(x2, y)
@@ -678,13 +708,14 @@ export class LadderRenderer {
     node: LayoutNode,
     rung: Rung,
     power: RungPowerState | null,
-    inputPowered: boolean = false
+    inputPowered: boolean = false,
+    visualOutPowered?: boolean
   ) {
     if (isLayoutInstruction(node)) {
       const ast = this._findAstInstruction(rung.nodes, node.nodeId);
       if (!ast) return;
       const powered    = power?.nodePowered.get(node.nodeId) ?? false;
-      const outPowered = this._outPw(power, node.nodeId);
+      const outPowered = visualOutPowered ?? this._outPw(power, node.nodeId);
       const selected   = this._selectedNodeId === node.nodeId;
       this._drawInstruction(g, container, node, ast, powered, outPowered, selected, inputPowered);
     } else {
@@ -746,8 +777,8 @@ export class LadderRenderer {
         .fill({ color: powered ? C.nodeOnBg : C.nodeBg })
         .stroke({ color: powered ? C.nodeOn : C.nodeBorder, width: 1 });
 
-      // Left stub = input power (block glows while running).
-      // Right stub = DN-based output (only lit when timer/counter is done).
+      // Left stub = input power. Right stub stays dark; use an explicit
+      // downstream XIC Timer.DN / Counter.DN contact to continue power flow.
       this._seg(g, x, bx, wireY, powered);
       this._seg(g, bx + bw, x + w, wireY, outPowered);
 
@@ -768,12 +799,15 @@ export class LadderRenderer {
       const timerData   = tagEntry?.timerData;
       const counterData = tagEntry?.counterData;
       const p = node.params as TimerParams | CounterParams;
+      const livePreset = isTimer
+        ? timerData?.preset
+        : counterData?.preset;
 
       const accumVal = isTimer
         ? (timerData?.accum ?? 0)
         : (counterData?.accum ?? 0);
 
-      const presetDisplay = p?.presetTag
+      const presetDisplay = livePreset !== undefined ? String(livePreset) : p?.presetTag
         ? `[${p.presetTag.length > 9 ? p.presetTag.slice(0, 8) + "…" : p.presetTag}]`
         : String(p?.preset ?? (isTimer ? 1000 : 10));
 
@@ -863,7 +897,7 @@ export class LadderRenderer {
           labels = ["Src", "Msk", "Dst"];
           // squeeze 3 rows into the same space
           const rowY3 = [wireY + 14, wireY + 28, wireY + 42];
-          const vals3 = [this._truncOp(p?.source ?? "?"), this._truncOp(p?.mask ?? "?"), _truncOp(p?.dest ?? "?")];
+          const vals3 = [this._truncOp(p?.source ?? "?"), this._truncOp(p?.mask ?? "?"), this._truncOp(p?.dest ?? "?")];
           for (let i = 0; i < 3; i++) {
             const lbl = new Text({ text: labels[i], style: labelSt });
             lbl.anchor.set(0, 0.5); lbl.position.set(bx + 4, rowY3[i]);
@@ -1115,14 +1149,17 @@ export class LadderRenderer {
         for (let ni = 0; ni < leg.nodes.length; ni++) {
           const nodeInputPowered = ni === 0
             ? inputPowered
-            : this._outPw(power, leg.nodes[ni - 1].nodeId);
-          this._drawNode(g, container, leg.nodes[ni], rung, power, nodeInputPowered);
+            : this._wireBetweenPw(power, rung.nodes, leg.nodes[ni - 1], leg.nodes[ni]);
+          const visualOutPowered = ni < leg.nodes.length - 1
+            ? this._wireBetweenPw(power, rung.nodes, leg.nodes[ni], leg.nodes[ni + 1])
+            : undefined;
+          this._drawNode(g, container, leg.nodes[ni], rung, power, nodeInputPowered, visualOutPowered);
         }
 
         for (let i = 0; i < leg.nodes.length - 1; i++) {
           const cur  = leg.nodes[i];
           const next = leg.nodes[i + 1];
-          const pw   = this._outPw(power, cur.nodeId);
+          const pw   = this._wireBetweenPw(power, rung.nodes, cur, next);
           g.moveTo(cur.x + cur.w, leg.wireY).lineTo(next.x, leg.wireY)
             .stroke({ color: pw ? C.wireOn : C.wireOff, width: 2 });
         }
@@ -1210,6 +1247,12 @@ export class LadderRenderer {
       return this.RUNG_NUMBER_W + (last ? last.x + last.w : layout.seriesStartX);
     };
 
+    // ── Branch-leg drop detection (checked first, takes priority) ────────────
+    const branchDrop = this._queryBranchDrop(
+      layout.nodes, localX, localY, rungId, rungY
+    );
+    if (branchDrop) return { ...branchDrop, rungY, rungH };
+
     if (isCoilDrag) {
       return {
         position: { kind: "series-append", rungId },
@@ -1219,12 +1262,6 @@ export class LadderRenderer {
         wireY: mainWireY,
       };
     }
-
-    // ── Branch-leg drop detection (checked first, takes priority) ────────────
-    const branchDrop = this._queryBranchDrop(
-      layout.nodes, localX, localY, rungId, rungY
-    );
-    if (branchDrop) return { ...branchDrop, rungY, rungH };
 
     const firstOutputIdx = entry.nodes.findIndex(n => isInstruction(n) && isCoilOutput(n.type));
 
@@ -1387,6 +1424,61 @@ export class LadderRenderer {
 
   clearDropZone() {
     this._dropGfx.clear();
+  }
+
+  showDropAnchors(dragType?: InstructionType) {
+    this._dropDotsGfx.clear();
+    const color = 0x4a8cff;
+    const outputOnly = dragType ? isCoilOutput(dragType) : false;
+    const outputClass = dragType ? isOutput(dragType) : false;
+
+    const drawDot = (x: number, y: number, strong = false) => {
+      this._dropDotsGfx.circle(x, y, strong ? 4 : 3)
+        .fill({ color, alpha: strong ? 0.9 : 0.48 });
+      this._dropDotsGfx.circle(x, y, strong ? 7 : 6)
+        .stroke({ color, alpha: strong ? 0.45 : 0.22, width: 1 });
+    };
+
+    const addSeriesDots = (nodes: LayoutNode[], rungId: string, wireY: number, seriesStartX: number, forceAppendOnly = false) => {
+      void rungId;
+      if (nodes.length === 0) {
+        drawDot(this.RUNG_NUMBER_W + seriesStartX, wireY, true);
+        return;
+      }
+      const last = nodes[nodes.length - 1];
+      if (forceAppendOnly) {
+        drawDot(this.RUNG_NUMBER_W + last.x + last.w, wireY, true);
+        return;
+      }
+      drawDot(this.RUNG_NUMBER_W + nodes[0].x, wireY);
+      for (let i = 0; i < nodes.length - 1; i++) {
+        drawDot(this.RUNG_NUMBER_W + nodes[i].x + nodes[i].w, wireY);
+      }
+      drawDot(this.RUNG_NUMBER_W + last.x + last.w, wireY, true);
+    };
+
+    const addBranchDots = (nodes: LayoutNode[], rungY: number) => {
+      for (const node of nodes) {
+        if (!isLayoutBranch(node)) continue;
+        for (const leg of node.legs) {
+          addSeriesDots(leg.nodes, "", rungY + leg.wireY, node.leftRailX + BRANCH_RAIL_W, false);
+          addBranchDots(leg.nodes, rungY);
+        }
+      }
+    };
+
+    for (const entry of this._rungLayoutData) {
+      const layout = entry.layout;
+      const mainWireY = entry.y + layout.wireY;
+      const firstOutputIdx = entry.nodes.findIndex(n => isInstruction(n) && isCoilOutput(n.type));
+      const forceAppendOnly = outputOnly || (outputClass && firstOutputIdx === -1);
+      addSeriesDots(layout.nodes, entry.rungId, mainWireY, layout.seriesStartX, forceAppendOnly);
+      addBranchDots(layout.nodes, entry.y);
+    }
+  }
+
+  clearDropAnchors() {
+    this._dropDotsGfx.clear();
   }
 
   /**

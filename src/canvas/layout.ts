@@ -12,8 +12,8 @@
 //   Origin (0,0) = left edge of the left power rail, vertical centre of rung
 // =============================================================================
 
-import type { Rung, SeriesNode, InstructionNode, BranchNode, BranchLeg } from "../model/types";
-import { isCoilOutput } from "../model/types";
+import type { Rung, SeriesNode, InstructionNode, BranchNode } from "../model/types";
+import { isOutput } from "../model/types";
 import { isInstruction, isBranch } from "../model/ast";
 
 // ---------------------------------------------------------------------------
@@ -26,6 +26,7 @@ export const INST_H        = 52;   // instruction block height (contacts / coils
 export const COMPLEX_INST_H       = 88;  // taller block for TON/TOF/RTO/CTU/CTD
 export const COMPLEX_INST_WIRE_Y  = 20;  // wireYLocal for complex blocks (wire near top)
 export const INST_GAP      = 16;   // horizontal gap between series elements
+export const BRANCH_PAD_H  = 34;   // horizontal padding inside branch rails
 export const BRANCH_PAD_V  = 10;   // vertical padding above/below each leg
 export const LEG_GAP_V     = 4;    // extra gap between legs inside a branch
 export const BRANCH_RAIL_W = 4;    // width of branch vertical bars
@@ -80,7 +81,7 @@ export interface LayoutBranch {
 export type LayoutNode = LayoutInstruction | LayoutBranch;
 
 export function isLayoutInstruction(n: LayoutNode): n is LayoutInstruction {
-  return "w" in n && !("legs" in n);
+  return !("legs" in n);
 }
 
 export function isLayoutBranch(n: LayoutNode): n is LayoutBranch {
@@ -188,7 +189,7 @@ function measureBranch(node: BranchNode): SizeResult {
   }
   totalH += BRANCH_PAD_V - LEG_GAP_V; // bottom padding
 
-  const totalW = maxLegW + BRANCH_RAIL_W * 2 + INST_GAP * 2;
+  const totalW = maxLegW + BRANCH_RAIL_W * 2 + BRANCH_PAD_H * 2;
 
   // Wire enters/exits at the midpoint of the first leg's wire
   const firstLegWireYLocal = BRANCH_PAD_V + legSizes[0].wireYLocal;
@@ -255,17 +256,21 @@ function placeNodes(
   return result;
 }
 
-function isOutputNode(node: SeriesNode): boolean {
-  if (isInstruction(node)) return isCoilOutput(node.type);
+function isOutputSectionNode(node: SeriesNode): boolean {
+  if (isInstruction(node)) return isOutput(node.type);
   // A branch is treated as an "output node" when every leg contains
   // only coil output instructions — i.e. parallel outputs (Studio 5000 style).
   if (isBranch(node)) {
     return node.legs.every(leg =>
-      leg.nodes.length > 0 &&
-      leg.nodes.every(n => isInstruction(n) && isCoilOutput(n.type))
+      leg.nodes.length === 0 ||
+      leg.nodes.every(isOutputSectionNode)
     );
   }
   return false;
+}
+
+function outputSectionStartIndex(nodes: SeriesNode[]): number {
+  return nodes.findIndex(isOutputSectionNode);
 }
 
 function placeTopLevelNodes(
@@ -274,11 +279,11 @@ function placeTopLevelNodes(
   endX: number,
   wireY: number
 ): LayoutNode[] {
-  const firstOutputIdx = nodes.findIndex(isOutputNode);
+  const firstOutputIdx = outputSectionStartIndex(nodes);
   if (firstOutputIdx === -1) return placeNodes(nodes, startX, wireY);
 
-  const inputNodes = nodes.filter(node => !isOutputNode(node));
-  const outputNodes = nodes.filter(isOutputNode);
+  const inputNodes = nodes.slice(0, firstOutputIdx);
+  const outputNodes = nodes.slice(firstOutputIdx);
   const outputSize = measureSeries(outputNodes);
   const outputStartX = endX - outputSize.w;
 
@@ -296,7 +301,7 @@ function placeBranch(
   const legSizes = node.legs.map(leg => measureSeries(leg.nodes));
   const maxLegW  = Math.max(...legSizes.map(s => s.w), INST_W);
   const innerW   = maxLegW;                          // content area width
-  const totalW   = innerW + BRANCH_RAIL_W * 2 + INST_GAP * 2;
+  const totalW   = innerW + BRANCH_RAIL_W * 2 + BRANCH_PAD_H * 2;
 
   // Lay legs out top-to-bottom; first leg's wire aligns with incoming wireY
   // Compute y offsets for each leg
@@ -313,8 +318,8 @@ function placeBranch(
   const firstLegWireLocal = legSizes[0].wireYLocal;
   const branchTop = wireY - BRANCH_PAD_V - firstLegWireLocal;
 
-  const leftRailX  = x + INST_GAP;
-  const rightRailX = x + INST_GAP + BRANCH_RAIL_W + innerW;
+  const leftRailX  = x + BRANCH_PAD_H;
+  const rightRailX = x + BRANCH_PAD_H + BRANCH_RAIL_W + innerW;
   const contentX   = leftRailX + BRANCH_RAIL_W;
 
   const layoutLegs: LayoutLeg[] = node.legs.map((leg, i) => {
@@ -388,7 +393,7 @@ export function layoutRung(rung: Rung, availableW: number, opts?: LayoutRungOpti
 
   // ── Determine if multi-band layout is required ─────────────────────────────
   // Separate output coils from input nodes; outputs are always right-aligned.
-  const firstOutputIdx = rung.nodes.findIndex(isOutputNode);
+  const firstOutputIdx = outputSectionStartIndex(rung.nodes);
   const inputNodesSrc  = firstOutputIdx >= 0 ? rung.nodes.slice(0, firstOutputIdx) : rung.nodes;
   const outputNodesSrc = firstOutputIdx >= 0 ? rung.nodes.slice(firstOutputIdx)     : [];
 
@@ -547,30 +552,31 @@ export function hitTest(
         return { nodeId: n.nodeId };
       }
     } else {
+      const branch = n as LayoutBranch;
       // Instructions inside branch legs take priority — check them first.
-      for (const leg of n.legs) {
+      for (const leg of branch.legs) {
         const hit = hitTest(leg.nodes, cx, cy);
         if (hit) return hit;
       }
       // If the cursor is anywhere inside the branch bounding box:
-      if (cx >= n.x && cx <= n.x + n.w && cy >= n.y && cy <= n.y + n.h) {
+      if (cx >= branch.x && cx <= branch.x + branch.w && cy >= branch.y && cy <= branch.y + branch.h) {
         // Left rail hit → drag to extend/shrink branch span leftward
-        if (cx >= n.leftRailX - 2 && cx <= n.leftRailX + BRANCH_RAIL_W + 4) {
-          return { nodeId: n.nodeId, rail: "left" };
+        if (cx >= branch.leftRailX - 2 && cx <= branch.leftRailX + BRANCH_RAIL_W + 4) {
+          return { nodeId: branch.nodeId, rail: "left" };
         }
         // Right rail hit → drag to extend/shrink branch span rightward
-        if (cx >= n.rightRailX - 4 && cx <= n.rightRailX + BRANCH_RAIL_W + 2) {
-          return { nodeId: n.nodeId, rail: "right" };
+        if (cx >= branch.rightRailX - 4 && cx <= branch.rightRailX + BRANCH_RAIL_W + 2) {
+          return { nodeId: branch.nodeId, rail: "right" };
         }
         // Clicks inside a leg's body → leg selection.
         // Assign to the closest leg by vertical distance.
-        let bestLeg = n.legs[0];
-        let bestDist = Math.abs(cy - n.legs[0].wireY);
-        for (const leg of n.legs.slice(1)) {
+        let bestLeg = branch.legs[0];
+        let bestDist = Math.abs(cy - branch.legs[0].wireY);
+        for (const leg of branch.legs.slice(1)) {
           const d = Math.abs(cy - leg.wireY);
           if (d < bestDist) { bestDist = d; bestLeg = leg; }
         }
-        return { nodeId: n.nodeId, legId: bestLeg.legId };
+        return { nodeId: branch.nodeId, legId: bestLeg.legId };
       }
     }
   }

@@ -42,6 +42,8 @@ export interface TimerData {
   tt: boolean;
   /** Timer Done bit */
   dn: boolean;
+  /** Runtime-only legacy field stripped while loading projects. */
+  _startMs?: number;
 }
 
 export interface CounterData {

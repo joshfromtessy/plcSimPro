@@ -8,7 +8,7 @@
 import { useProjectStore } from "../../store/projectStore";
 import { useSimulationStore } from "../../store/simulationStore";
 import { useEditorStore } from "../../store/editorStore";
-import type { Rung, SeriesNode, InstructionNode, BranchNode, InsertPosition } from "../../model/types";
+import type { Rung, SeriesNode, InstructionNode, BranchNode, InsertPosition, InstructionType } from "../../model/types";
 import { isInstruction, isBranch } from "../../model/ast";
 import "./LadderCanvas.css";
 
@@ -95,9 +95,9 @@ interface RungViewProps {
   powered: boolean;
   nodePowered: Map<string, boolean>;
   legPowered: Map<string, boolean>;
-  onInsert: (pos: InsertPosition, type: string) => void;
+  onInsert: (pos: InsertPosition, type: InstructionType) => void;
   onDelete: (target: any) => void;
-  dragType: string | null;
+  dragType: InstructionType | null;
 }
 
 function RungView({ rung, rungNumber, routineId, powered, nodePowered, legPowered, onInsert, onDelete, dragType }: RungViewProps) {
@@ -160,8 +160,8 @@ interface NodeViewProps {
   nodePowered: Map<string, boolean>;
   legPowered: Map<string, boolean>;
   onDelete: (target: any) => void;
-  dragType: string | null;
-  onInsert: (pos: InsertPosition, type: string) => void;
+  dragType: InstructionType | null;
+  onInsert: (pos: InsertPosition, type: InstructionType) => void;
 }
 
 function NodeView(props: NodeViewProps) {
