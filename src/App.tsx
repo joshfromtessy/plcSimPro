@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import { Toolbar } from "./components/toolbar/Toolbar";
 import { InstructionPalette } from "./components/panels/InstructionPalette";
 import { PixiCanvas } from "./canvas/PixiCanvas";
@@ -18,6 +19,7 @@ export default function App() {
         <TagPanel />
       </div>
       <StatusBar />
+      <Analytics />
     </div>
   );
 }
