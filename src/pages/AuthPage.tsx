@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
-import { isSupabaseConfigured } from "../lib/supabase";
+import { isSupabaseConfigured, missingSupabaseEnv } from "../lib/supabase";
 import { useAuthStore } from "../store/authStore";
 
 interface AuthPageProps {
@@ -41,9 +41,18 @@ export function AuthPage({ theme, mode }: AuthPageProps) {
           <div className="auth-config-note">
             <h2>Supabase setup needed</h2>
             <p>
-              Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code>
-              to a local <code>.env.local</code> file, then restart the dev server.
+              Add Supabase build environment variables in Cloudflare, then redeploy.
             </p>
+            <ul className="auth-config-list">
+              <li>
+                URL: <code>VITE_SUPABASE_URL</code> or <code>SUPABASE_URL</code>
+                {missingSupabaseEnv.url ? " is missing" : " is present"}
+              </li>
+              <li>
+                Anon key: <code>VITE_SUPABASE_ANON_KEY</code> or <code>SUPABASE_ANON_KEY</code>
+                {missingSupabaseEnv.anonKey ? " is missing" : " is present"}
+              </li>
+            </ul>
           </div>
         ) : (
           <form className="auth-form" onSubmit={handleSubmit}>

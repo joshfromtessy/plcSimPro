@@ -17,6 +17,13 @@ VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_ANON_KEY=your-public-anon-key
 ```
 
+These names also work if you already created them without the `VITE_` prefix:
+
+```text
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_ANON_KEY=your-public-anon-key
+```
+
 5. Redeploy the project.
 
 Use the same variables for Preview if you want branch/preview deploys to test

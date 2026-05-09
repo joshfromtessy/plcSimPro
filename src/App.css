@@ -231,3 +231,14 @@
 .auth-config-note code {
   color: var(--accent-yellow);
 }
+
+.auth-config-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.auth-config-list li {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
