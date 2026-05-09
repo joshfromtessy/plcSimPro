@@ -320,6 +320,108 @@ function writeTagNumber(tagName: string, value: number, tags: Map<string, TagDef
 // Preset resolution — literal or DINT/INT tag reference
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Structured Text execution (MVP IEC 61131-3 subset)
+// ---------------------------------------------------------------------------
+
+type StControlFrame = {
+  parentActive: boolean;
+  condition: boolean;
+  inElse: boolean;
+};
+
+function executeStructuredText(source: string, tags: Map<string, TagDefinition>): void {
+  const frames: StControlFrame[] = [];
+  const lines = stripStructuredTextBlockComments(source).split(/\r?\n/);
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\/\/.*$/, "").trim();
+    if (!line) continue;
+
+    const upper = line.toUpperCase().replace(/;$/, "").trim();
+    if (upper === "ELSE") {
+      const frame = frames.at(-1);
+      if (frame) frame.inElse = true;
+      continue;
+    }
+    if (upper === "END_IF") {
+      frames.pop();
+      continue;
+    }
+
+    const ifMatch = line.match(/^IF\s+(.+?)\s+THEN\s*;?$/i);
+    if (ifMatch) {
+      const parentActive = isStructuredTextActive(frames);
+      frames.push({
+        parentActive,
+        condition: parentActive ? Boolean(evaluateStructuredTextExpression(ifMatch[1], tags)) : false,
+        inElse: false,
+      });
+      continue;
+    }
+
+    if (!isStructuredTextActive(frames)) continue;
+
+    const assignMatch = line.match(/^([A-Za-z_]\w*(?:\[\d+\])?(?:\.\w+)?)\s*:=\s*(.+?)\s*;?$/);
+    if (!assignMatch) continue;
+
+    const target = assignMatch[1];
+    const value = evaluateStructuredTextExpression(assignMatch[2], tags);
+    const targetTag = tags.get(parseTagRef(target).base);
+    if (targetTag?.dataType === "BOOL") {
+      writeBool(tags, target, Boolean(value));
+    } else {
+      writeTagNumber(target, Number(value) || 0, tags);
+    }
+  }
+}
+
+function stripStructuredTextBlockComments(source: string): string {
+  return source.replace(/\(\*[\s\S]*?\*\)/g, "");
+}
+
+function isStructuredTextActive(frames: StControlFrame[]): boolean {
+  return frames.every(frame => frame.parentActive && (frame.inElse ? !frame.condition : frame.condition));
+}
+
+function evaluateStructuredTextExpression(expr: string, tags: Map<string, TagDefinition>): number | boolean {
+  const jsExpr = toStructuredTextJavaScriptExpression(expr);
+  try {
+    const fn = new Function("__read", `return (${jsExpr});`) as (reader: (ref: string) => number | boolean) => unknown;
+    const result = fn((ref) => readStructuredTextValue(ref, tags));
+    return typeof result === "boolean" ? result : Number(result) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function toStructuredTextJavaScriptExpression(expr: string): string {
+  const keywords = new Set(["AND", "OR", "NOT", "MOD", "TRUE", "FALSE"]);
+  let out = expr
+    .replace(/<>/g, "!==")
+    .replace(/\bAND\b/gi, "&&")
+    .replace(/\bOR\b/gi, "||")
+    .replace(/\bNOT\b/gi, "!")
+    .replace(/\bMOD\b/gi, "%")
+    .replace(/\bTRUE\b/gi, "true")
+    .replace(/\bFALSE\b/gi, "false");
+
+  out = out.replace(/(^|[^<>=!])=([^=])/g, "$1===$2");
+
+  return out.replace(/\b[A-Za-z_]\w*(?:\[\d+\])?(?:\.\w+)?\b/g, (token) => {
+    if (keywords.has(token.toUpperCase()) || token === "true" || token === "false") return token;
+    if (/^\d/.test(token)) return token;
+    return `__read(${JSON.stringify(token)})`;
+  });
+}
+
+function readStructuredTextValue(ref: string, tags: Map<string, TagDefinition>): number | boolean {
+  const tag = tags.get(parseTagRef(ref).base);
+  if (!tag) return 0;
+  if (tag.dataType === "BOOL") return readTagBit(tags, ref);
+  return readTagNumber(ref, tags);
+}
+
 function resolvePreset(
   params: InstructionParams,
   tags: Map<string, TagDefinition>,
@@ -811,6 +913,12 @@ function executeRoutine(
   ctx: ScanExecutionContext
 ): void {
   ctx.callStack.push(routine.id);
+
+  if (routine.language === "ST") {
+    executeStructuredText(routine.structuredText ?? "", tagMap);
+    ctx.callStack.pop();
+    return;
+  }
 
   for (const rung of routine.rungs) {
     const state = evaluateRung(rung, tagMap, deltaMs, ctx);

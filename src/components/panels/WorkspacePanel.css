@@ -99,7 +99,7 @@
 }
 
 .program-row {
-  grid-template-columns: 18px 1fr 24px;
+  grid-template-columns: 18px 1fr auto;
   gap: 4px;
   padding: 5px 8px;
 }
@@ -148,14 +148,20 @@
   color: var(--text-primary);
 }
 
+.routine-add-group {
+  display: flex;
+  gap: 3px;
+}
+
 .routine-add-btn {
-  width: 22px;
+  width: 25px;
   height: 22px;
   border-radius: 3px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-dim);
-  font-size: 15px;
+  font-size: 10px;
+  font-weight: 800;
   line-height: 1;
 }
 
@@ -163,6 +169,12 @@
   color: var(--accent-blue);
   border-color: var(--accent-blue);
   background: var(--accent-blue-bg);
+}
+
+.routine-add-btn--st:hover {
+  color: var(--accent-yellow);
+  border-color: var(--accent-yellow);
+  background: rgba(255, 170, 0, 0.12);
 }
 
 .routine-list {
@@ -199,6 +211,11 @@
   font-family: ui-monospace, Consolas, monospace;
   font-size: 9px;
   font-weight: 700;
+}
+
+.routine-icon--st {
+  color: var(--accent-yellow);
+  border-color: rgba(255, 170, 0, 0.45);
 }
 
 .routine-name {

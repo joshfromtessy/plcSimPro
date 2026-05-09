@@ -10,6 +10,7 @@ import { immer } from "zustand/middleware/immer";
 import type {
   PlcProject,
   Routine,
+  RoutineLanguage,
   Rung,
   SeriesNode,
   InstructionNode,
@@ -97,8 +98,14 @@ function makeRung(comment = ""): Rung {
   return { id: genId("rung"), comment, nodes: [] };
 }
 
-function makeRoutine(name: string): Routine {
-  return { id: genId("routine"), name, rungs: [] };
+function makeRoutine(name: string, language: RoutineLanguage = "LAD"): Routine {
+  return {
+    id: genId("routine"),
+    name,
+    language,
+    rungs: [],
+    structuredText: language === "ST" ? "(* Structured Text routine *)\n" : undefined,
+  };
 }
 
 function makeDefaultProject(): PlcProject {
@@ -149,9 +156,10 @@ export interface ProjectState {
 
   // ── Routines
   setActiveRoutine: (id: string) => void;
-  addRoutine: (programId: string, name: string) => void;
+  addRoutine: (programId: string, name: string, language?: RoutineLanguage) => void;
   renameRoutine: (routineId: string, name: string) => void;
   deleteRoutine: (routineId: string) => void;
+  setStructuredText: (routineId: string, source: string) => void;
 
   // ── Rungs
   addRung: (routineId: string, comment?: string) => void;
@@ -300,6 +308,15 @@ export const useProjectStore = create<ProjectState>()(
           // Strip runtime-only _startMs from timerData so it doesn't pollute state
           const cleaned = {
             ...data,
+            programs: data.programs.map(program => ({
+              ...program,
+              routines: program.routines.map(routine => ({
+                ...routine,
+                language: routine.language ?? "LAD",
+                rungs: routine.rungs ?? [],
+                structuredText: routine.language === "ST" ? routine.structuredText ?? "" : routine.structuredText,
+              })),
+            })),
             tags: data.tags.map(tag => {
               const t = { ...tag };
               if (t.timerData) {
@@ -414,12 +431,12 @@ export const useProjectStore = create<ProjectState>()(
       setActiveRoutine: (id) =>
         set((s) => { s.activeRoutineId = id; }),
 
-      addRoutine: (programId, name) =>
+      addRoutine: (programId, name, language = "LAD") =>
         set((s) => {
           const prog = s.project.programs.find((p) => p.id === programId);
           if (prog) {
             pushUndo(s);
-            const r = makeRoutine(name);
+            const r = makeRoutine(name, language);
             prog.routines.push(r);
             s.activeRoutineId = r.id;
           }
@@ -456,6 +473,15 @@ export const useProjectStore = create<ProjectState>()(
             s.lastError = null;
             return;
           }
+        }),
+
+      setStructuredText: (routineId, source) =>
+        set((s) => {
+          const routine = findRoutine(s.project, routineId);
+          if (!routine || routine.language !== "ST") return;
+          pushUndo(s);
+          routine.structuredText = source;
+          s.lastError = null;
         }),
 
       // ── Rungs ─────────────────────────────────────────────────────────────

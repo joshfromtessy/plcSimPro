@@ -282,10 +282,15 @@ export interface Rung {
 /**
  * A named collection of rungs — analogous to a Studio 5000 Routine.
  */
+export type RoutineLanguage = "LAD" | "ST";
+
 export interface Routine {
   id: string;
   name: string;
+  language: RoutineLanguage;
   rungs: Rung[];
+  /** IEC 61131-3 Structured Text source for ST routines. */
+  structuredText?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useProjectStore } from "../../store/projectStore";
 import { TagPanel } from "./TagPanel";
+import type { RoutineLanguage } from "../../model/types";
 import "./WorkspacePanel.css";
 
 type WorkspaceTab = "programs" | "tags";
@@ -58,8 +59,8 @@ function ProgramTree() {
     });
   }
 
-  function handleAddRoutine(programId: string, existingCount: number) {
-    addRoutine(programId, `Routine${existingCount + 1}`);
+  function handleAddRoutine(programId: string, existingCount: number, language: RoutineLanguage) {
+    addRoutine(programId, `${language === "ST" ? "StructuredText" : "Routine"}${existingCount + 1}`, language);
     setOpenPrograms(current => new Set(current).add(programId));
   }
 
@@ -113,14 +114,24 @@ function ProgramTree() {
                 >
                   {program.name}
                 </button>
-                <button
-                  className="routine-add-btn"
-                  type="button"
-                  onClick={() => handleAddRoutine(program.id, program.routines.length)}
-                  title="Add routine"
-                >
-                  +
-                </button>
+                <div className="routine-add-group">
+                  <button
+                    className="routine-add-btn"
+                    type="button"
+                    onClick={() => handleAddRoutine(program.id, program.routines.length, "LAD")}
+                    title="Add ladder routine"
+                  >
+                    +L
+                  </button>
+                  <button
+                    className="routine-add-btn routine-add-btn--st"
+                    type="button"
+                    onClick={() => handleAddRoutine(program.id, program.routines.length, "ST")}
+                    title="Add structured text routine"
+                  >
+                    +S
+                  </button>
+                </div>
               </div>
 
               {isOpen && (
@@ -136,7 +147,9 @@ function ProgramTree() {
                           if (!isEditing) setActiveRoutine(routine.id);
                         }}
                       >
-                        <span className="routine-icon">LAD</span>
+                        <span className={`routine-icon routine-icon--${(routine.language ?? "LAD").toLowerCase()}`}>
+                          {routine.language ?? "LAD"}
+                        </span>
                         {isEditing ? (
                           <input
                             className="routine-name-input"
@@ -162,7 +175,9 @@ function ProgramTree() {
                             {routine.name}
                           </button>
                         )}
-                        <span className="routine-count">{routine.rungs.length}</span>
+                        <span className="routine-count">
+                          {(routine.language ?? "LAD") === "ST" ? `${(routine.structuredText ?? "").split(/\r?\n/).length}L` : routine.rungs.length}
+                        </span>
                         {!isEditing && (
                           <div className="routine-actions">
                             <button
