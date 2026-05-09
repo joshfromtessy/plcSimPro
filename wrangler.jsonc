@@ -6,4 +6,14 @@
     "directory": "./dist",
     "not_found_handling": "single-page-application"
   }
+
+  // Do not commit real Supabase values here.
+  // Vite needs VITE_* variables during `npm run build`, so set them in
+  // Cloudflare Workers & Pages -> your project -> Settings -> Environment variables.
+  //
+  // Example only:
+  // "vars": {
+  //   "VITE_SUPABASE_URL": "https://your-project-ref.supabase.co",
+  //   "VITE_SUPABASE_ANON_KEY": "your-public-anon-key"
+  // }
 }
