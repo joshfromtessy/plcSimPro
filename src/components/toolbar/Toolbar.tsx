@@ -2,7 +2,9 @@ import { useRef } from "react";
 import { NavLink } from "react-router-dom";
 import { useSimulationStore } from "../../store/simulationStore";
 import { useProjectStore } from "../../store/projectStore";
+import { useAuthStore } from "../../store/authStore";
 import type { PlcProject } from "../../model/types";
+import { CloudProjectMenu } from "./CloudProjectMenu";
 import "./Toolbar.css";
 
 interface ToolbarProps {
@@ -12,6 +14,7 @@ interface ToolbarProps {
 
 export function Toolbar({ theme, onToggleTheme }: ToolbarProps) {
   const { mode, start, stop, singleScan, scanIntervalMs, setScanInterval } = useSimulationStore();
+  const { user, signOut } = useAuthStore();
   const {
     project,
     newProject,
@@ -114,6 +117,7 @@ export function Toolbar({ theme, onToggleTheme }: ToolbarProps) {
           <LoadIcon />
           <span>Open</span>
         </button>
+        {user && <CloudProjectMenu />}
         {/* Hidden file input for open dialog */}
         <input
           ref={fileInputRef}
@@ -204,7 +208,15 @@ export function Toolbar({ theme, onToggleTheme }: ToolbarProps) {
           <NavLink to="/" end>Editor</NavLink>
           <NavLink to="/help">Help</NavLink>
           <NavLink to="/about">About</NavLink>
+          <NavLink to={user ? "/account" : "/login"}>
+            {user ? "Account" : "Login"}
+          </NavLink>
         </nav>
+        {user && (
+          <button className="toolbar-btn auth-chip" onClick={signOut} title={user.email ?? "Signed in"}>
+            {user.email ?? "Account"}
+          </button>
+        )}
         <button className="toolbar-btn icon-btn" onClick={onToggleTheme} title="Toggle theme">
           {theme === "dark" ? "Light" : "Dark"}
         </button>

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
+import { useAuthStore } from "../store/authStore";
 
 interface PageShellProps {
   theme: "dark" | "light";
@@ -9,6 +10,8 @@ interface PageShellProps {
 }
 
 export function PageShell({ theme, title, eyebrow, children }: PageShellProps) {
+  const user = useAuthStore((s) => s.user);
+
   return (
     <div className="app-root page-root" data-theme={theme}>
       <header className="page-header">
@@ -17,6 +20,9 @@ export function PageShell({ theme, title, eyebrow, children }: PageShellProps) {
           <NavLink to="/" end>Editor</NavLink>
           <NavLink to="/help">Help</NavLink>
           <NavLink to="/about">About</NavLink>
+          <NavLink to={user ? "/account" : "/login"}>
+            {user ? "Account" : "Login"}
+          </NavLink>
         </nav>
       </header>
       <main className="page-content">
