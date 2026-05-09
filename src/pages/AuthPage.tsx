@@ -49,7 +49,9 @@ export function AuthPage({ theme, mode }: AuthPageProps) {
                 {missingSupabaseEnv.url ? " is missing" : " is present"}
               </li>
               <li>
-                Anon key: <code>VITE_SUPABASE_ANON_KEY</code> or <code>SUPABASE_ANON_KEY</code>
+                Publishable key: <code>VITE_SUPABASE_PUBLISHABLE_KEY</code>,{" "}
+                <code>VITE_SUPABASE_ANON_KEY</code>,{" "}
+                <code>SUPABASE_PUBLISHABLE_KEY</code>, or <code>SUPABASE_ANON_KEY</code>
                 {missingSupabaseEnv.anonKey ? " is missing" : " is present"}
               </li>
             </ul>

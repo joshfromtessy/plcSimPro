@@ -14,14 +14,14 @@ In Cloudflare:
 
 ```text
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
-VITE_SUPABASE_ANON_KEY=your-public-anon-key
+VITE_SUPABASE_PUBLISHABLE_KEY=your-public-publishable-key
 ```
 
 These names also work if you already created them without the `VITE_` prefix:
 
 ```text
 SUPABASE_URL=https://your-project-ref.supabase.co
-SUPABASE_ANON_KEY=your-public-anon-key
+SUPABASE_PUBLISHABLE_KEY=your-public-publishable-key
 ```
 
 5. Redeploy the project.
@@ -37,7 +37,7 @@ In Supabase:
 2. Go to `Project Settings`.
 3. Open `API`.
 4. Copy the project URL.
-5. Copy the public anon key.
+5. Copy the public publishable key.
 
 ## Do Not Commit Real Values
 

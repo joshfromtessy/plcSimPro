@@ -1,7 +1,12 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const supabaseUrl = pickEnv("VITE_SUPABASE_URL", "SUPABASE_URL");
-const supabaseAnonKey = pickEnv("VITE_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY");
+const supabaseAnonKey = pickEnv(
+  "VITE_SUPABASE_PUBLISHABLE_KEY",
+  "VITE_SUPABASE_ANON_KEY",
+  "SUPABASE_PUBLISHABLE_KEY",
+  "SUPABASE_ANON_KEY"
+);
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 export const missingSupabaseEnv = {
