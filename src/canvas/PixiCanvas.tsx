@@ -157,6 +157,9 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
     }).then(() => {
       container.appendChild(app.canvas);
       app.canvas.style.display = "block";
+      app.canvas.style.position = "absolute";
+      app.canvas.style.top = "0";
+      app.canvas.style.left = "0";
       app.canvas.style.width   = "100%";
 
       const lr = new LadderRenderer(app);
@@ -208,6 +211,19 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
     cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => renderRef.current());
   }, [routine?.rungs, scanResult, selection, tagValues.size, showNodeComments, showRungComments]);
+
+  useEffect(() => {
+    const container = canvasRef.current;
+    if (!container) return;
+    container.scrollTop = 0;
+    container.scrollLeft = 0;
+  }, [activeRoutineId]);
+
+  useEffect(() => {
+    if (routine?.rungs.length === 1) {
+      canvasRef.current?.scrollTo({ top: 0, left: 0 });
+    }
+  }, [routine?.rungs.length]);
 
   // Theme changes arrive through CSS variables on the parent app root.
   useLayoutEffect(() => {
@@ -1086,9 +1102,9 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
   function handleDoubleClick(e: React.MouseEvent) {
     const coords = getCanvasCoords(e);
     if (!coords) return;
-    const outerRect = outerRef.current?.getBoundingClientRect();
-    const editorX = outerRect ? e.clientX - outerRect.left : e.clientX;
-    const editorY = outerRect ? e.clientY - outerRect.top  : e.clientY;
+    const wrapRect = canvasRef.current?.getBoundingClientRect();
+    const editorX = wrapRect ? e.clientX - wrapRect.left : e.clientX;
+    const editorY = wrapRect ? e.clientY - wrapRect.top + (canvasRef.current?.scrollTop ?? 0) : e.clientY;
 
     const hitGutterRungId = rendererRef.current?.hitTestOnlineEditGutter(coords.x, coords.y);
     if (hitGutterRungId && routine) {
@@ -1106,7 +1122,12 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
     const node = hit && rung ? findNodeById(rung.nodes, hit.nodeId) : null;
 
     if (hit && node?.kind === "instruction") {
-      const editorState: TagEditorState = { rungId: hit.rungId, nodeId: hit.nodeId, x: editorX, y: editorY };
+      const editorState: TagEditorState = getEditorAnchor(hit.rungId, hit.nodeId) ?? {
+        rungId: hit.rungId,
+        nodeId: hit.nodeId,
+        x: editorX,
+        y: editorY,
+      };
       useEditorStore.getState().setSelection({ kind: "node", rungId: hit.rungId, nodeId: hit.nodeId });
       if (node.type === "NOP") {
         setTagEditor(null);
@@ -1144,6 +1165,38 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
       setComplexEditor(null);
       setCompareMovEditor(null);
     }
+  }
+
+  function getEditorAnchor(rungId: string, nodeId: string): TagEditorState | null {
+    const layout = rendererRef.current?.getInstructionLayout(rungId, nodeId);
+    const bounds = rendererRef.current?.getRungBounds(rungId);
+    const wrap = canvasRef.current;
+    if (!layout || !bounds || !wrap) return null;
+
+    const panelW = 320;
+    const panelH = 220;
+    const pad = 10;
+    const scrollTop = wrap.scrollTop;
+    const viewportW = wrap.clientWidth;
+    const viewportH = wrap.clientHeight;
+    const nodeLeft = rendererRef.current!.RUNG_NUMBER_W + layout.x;
+    const nodeRight = nodeLeft + layout.w;
+    const nodeTop = bounds.y + layout.y;
+    const nodeMidY = bounds.y + layout.wireY;
+
+    let x = nodeRight + pad;
+    if (x + panelW > viewportW - pad) {
+      x = Math.max(pad, nodeLeft - panelW - pad);
+    }
+
+    let y = nodeMidY - 18;
+    const visibleBottom = scrollTop + viewportH - pad;
+    if (y + panelH > visibleBottom) {
+      y = Math.max(scrollTop + pad, visibleBottom - panelH);
+    }
+    if (y < scrollTop + pad) y = scrollTop + pad;
+
+    return { rungId, nodeId, x, y };
   }
 
   function handleAddRung() {
@@ -1329,39 +1382,39 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
             Click <strong>+ Rung</strong> to add a rung
           </div>
         )}
+
+        {tagEditor && (
+          <TagQuickEdit
+            editor={tagEditor}
+            routineId={routine.id}
+            onClose={() => setTagEditor(null)}
+          />
+        )}
+
+        {complexEditor && (
+          <ComplexParamEditor
+            editor={complexEditor}
+            routineId={routine.id}
+            onClose={() => setComplexEditor(null)}
+          />
+        )}
+
+        {compareMovEditor && (
+          <CompareMovEditor
+            editor={compareMovEditor}
+            routineId={routine.id}
+            onClose={() => setCompareMovEditor(null)}
+          />
+        )}
+
+        {rungCommentEditor && (
+          <RungCommentEditor
+            editor={rungCommentEditor}
+            routineId={routine.id}
+            onClose={() => setRungCommentEditor(null)}
+          />
+        )}
       </div>
-
-      {tagEditor && (
-        <TagQuickEdit
-          editor={tagEditor}
-          routineId={routine.id}
-          onClose={() => setTagEditor(null)}
-        />
-      )}
-
-      {complexEditor && (
-        <ComplexParamEditor
-          editor={complexEditor}
-          routineId={routine.id}
-          onClose={() => setComplexEditor(null)}
-        />
-      )}
-
-      {compareMovEditor && (
-        <CompareMovEditor
-          editor={compareMovEditor}
-          routineId={routine.id}
-          onClose={() => setCompareMovEditor(null)}
-        />
-      )}
-
-      {rungCommentEditor && (
-        <RungCommentEditor
-          editor={rungCommentEditor}
-          routineId={routine.id}
-          onClose={() => setRungCommentEditor(null)}
-        />
-      )}
 
       {selection?.kind === "leg" && (
         <LegBar

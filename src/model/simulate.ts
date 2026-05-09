@@ -324,71 +324,317 @@ function writeTagNumber(tagName: string, value: number, tags: Map<string, TagDef
 // Structured Text execution (MVP IEC 61131-3 subset)
 // ---------------------------------------------------------------------------
 
-type StControlFrame = {
-  parentActive: boolean;
-  condition: boolean;
-  inElse: boolean;
-};
+interface StLine {
+  text: string;
+  lineNumber: number;
+}
+
+interface StBlockMarker {
+  elseIndex?: number;
+  endIndex: number;
+}
+
+const ST_LOOP_LIMIT = 10_000;
 
 function executeStructuredText(source: string, tags: Map<string, TagDefinition>): void {
-  const frames: StControlFrame[] = [];
-  const lines = stripStructuredTextBlockComments(source).split(/\r?\n/);
-
-  for (const rawLine of lines) {
-    const line = rawLine.replace(/\/\/.*$/, "").trim();
-    if (!line) continue;
-
-    const upper = line.toUpperCase().replace(/;$/, "").trim();
-    if (upper === "ELSE") {
-      const frame = frames.at(-1);
-      if (frame) frame.inElse = true;
-      continue;
-    }
-    if (upper === "END_IF") {
-      frames.pop();
-      continue;
-    }
-
-    const ifMatch = line.match(/^IF\s+(.+?)\s+THEN\s*;?$/i);
-    if (ifMatch) {
-      const parentActive = isStructuredTextActive(frames);
-      frames.push({
-        parentActive,
-        condition: parentActive ? Boolean(evaluateStructuredTextExpression(ifMatch[1], tags)) : false,
-        inElse: false,
-      });
-      continue;
-    }
-
-    if (!isStructuredTextActive(frames)) continue;
-
-    const assignMatch = line.match(/^([A-Za-z_]\w*(?:\[\d+\])?(?:\.\w+)?)\s*:=\s*(.+?)\s*;?$/);
-    if (!assignMatch) continue;
-
-    const target = assignMatch[1];
-    const value = evaluateStructuredTextExpression(assignMatch[2], tags);
-    const targetTag = tags.get(parseTagRef(target).base);
-    if (targetTag?.dataType === "BOOL") {
-      writeBool(tags, target, Boolean(value));
-    } else {
-      writeTagNumber(target, Number(value) || 0, tags);
-    }
-  }
+  const lines = normalizeStructuredTextLines(source);
+  executeStructuredTextBlock(lines, 0, lines.length, tags);
 }
 
 function stripStructuredTextBlockComments(source: string): string {
   return source.replace(/\(\*[\s\S]*?\*\)/g, "");
 }
 
-function isStructuredTextActive(frames: StControlFrame[]): boolean {
-  return frames.every(frame => frame.parentActive && (frame.inElse ? !frame.condition : frame.condition));
+function normalizeStructuredTextLines(source: string): StLine[] {
+  return stripStructuredTextBlockComments(source)
+    .split(/\r?\n/)
+    .map((rawLine, index) => ({
+      text: rawLine.replace(/\/\/.*$/, "").trim(),
+      lineNumber: index + 1,
+    }))
+    .filter(line => line.text.length > 0);
+}
+
+function executeStructuredTextBlock(
+  lines: StLine[],
+  start: number,
+  end: number,
+  tags: Map<string, TagDefinition>
+): void {
+  let index = start;
+  while (index < end) {
+    const line = lines[index].text;
+    const upper = normalizeStStatement(line);
+
+    if (isIfBranchLine(line) || isCaseBranchLine(line) || isEndStructuredTextStatement(upper)) {
+      return;
+    }
+
+    const ifMatch = line.match(/^IF\s+(.+?)\s+THEN\s*;?$/i);
+    if (ifMatch) {
+      const marker = findStructuredTextBlock(lines, index, end, "IF", [], ["END_IF"]);
+      executeStructuredTextIf(lines, index, marker.endIndex, ifMatch[1], tags);
+      index = marker.endIndex + 1;
+      continue;
+    }
+
+    const whileMatch = line.match(/^WHILE\s+(.+?)\s+DO\s*;?$/i);
+    if (whileMatch) {
+      const marker = findStructuredTextBlock(lines, index, end, "WHILE", [], ["END_WHILE"]);
+      let guard = 0;
+      while (Boolean(evaluateStructuredTextExpression(whileMatch[1], tags)) && guard < ST_LOOP_LIMIT) {
+        executeStructuredTextBlock(lines, index + 1, marker.endIndex, tags);
+        guard += 1;
+      }
+      index = marker.endIndex + 1;
+      continue;
+    }
+
+    const forMatch = line.match(/^FOR\s+([A-Za-z_]\w*(?:\[[^\]]+\])?(?:\.\w+)?)\s*:=\s*(.+?)\s+TO\s+(.+?)(?:\s+BY\s+(.+?))?\s+DO\s*;?$/i);
+    if (forMatch) {
+      const marker = findStructuredTextBlock(lines, index, end, "FOR", [], ["END_FOR"]);
+      const target = forMatch[1];
+      const startValue = Number(evaluateStructuredTextExpression(forMatch[2], tags)) || 0;
+      const endValue = Number(evaluateStructuredTextExpression(forMatch[3], tags)) || 0;
+      const stepValue = Number(forMatch[4] ? evaluateStructuredTextExpression(forMatch[4], tags) : 1) || 1;
+      let loopValue = startValue;
+      let guard = 0;
+      const shouldContinue = () => stepValue >= 0 ? loopValue <= endValue : loopValue >= endValue;
+      while (shouldContinue() && guard < ST_LOOP_LIMIT) {
+        writeStructuredTextValue(target, loopValue, tags);
+        executeStructuredTextBlock(lines, index + 1, marker.endIndex, tags);
+        loopValue += stepValue;
+        guard += 1;
+      }
+      writeStructuredTextValue(target, loopValue, tags);
+      index = marker.endIndex + 1;
+      continue;
+    }
+
+    const caseMatch = line.match(/^CASE\s+(.+?)\s+OF\s*;?$/i);
+    if (caseMatch) {
+      const marker = findStructuredTextBlock(lines, index, end, "CASE", [], ["END_CASE"]);
+      executeStructuredTextCase(lines, index + 1, marker.endIndex, evaluateStructuredTextExpression(caseMatch[1], tags), tags);
+      index = marker.endIndex + 1;
+      continue;
+    }
+
+    executeStructuredTextStatement(line, tags);
+    index += 1;
+  }
+}
+
+function executeStructuredTextStatement(line: string, tags: Map<string, TagDefinition>): void {
+  const assignMatch = line.match(/^([A-Za-z_]\w*(?:\[[^\]]+\])?(?:\.\w+)?)\s*:=\s*(.+?)\s*;?$/);
+  if (!assignMatch) return;
+  writeStructuredTextValue(assignMatch[1], evaluateStructuredTextExpression(assignMatch[2], tags), tags);
+}
+
+function executeStructuredTextIf(
+  lines: StLine[],
+  ifIndex: number,
+  endIndex: number,
+  firstCondition: string,
+  tags: Map<string, TagDefinition>
+): void {
+  const branches = collectStructuredTextIfBranches(lines, ifIndex, endIndex, firstCondition);
+  const branch = branches.find(candidate =>
+    candidate.condition === null || Boolean(evaluateStructuredTextExpression(candidate.condition, tags))
+  );
+  if (branch) executeStructuredTextBlock(lines, branch.start, branch.end, tags);
+}
+
+function collectStructuredTextIfBranches(
+  lines: StLine[],
+  ifIndex: number,
+  endIndex: number,
+  firstCondition: string
+): Array<{ condition: string | null; start: number; end: number }> {
+  const branches: Array<{ condition: string | null; start: number; end: number }> = [];
+  let current: { condition: string | null; start: number; end: number } = {
+    condition: firstCondition,
+    start: ifIndex + 1,
+    end: endIndex,
+  };
+  let depth = 0;
+
+  for (let index = ifIndex + 1; index < endIndex; index += 1) {
+    const text = lines[index].text;
+    const upper = normalizeStStatement(text);
+    if (isStBlockStart(upper)) {
+      depth += 1;
+      continue;
+    }
+    if (isEndStructuredTextStatement(upper)) {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (depth !== 0) continue;
+
+    const elsifMatch = text.match(/^ELSIF\s+(.+?)\s+THEN\s*;?$/i);
+    if (elsifMatch || upper === "ELSE") {
+      current.end = index;
+      branches.push(current);
+      current = {
+        condition: elsifMatch ? elsifMatch[1] : null,
+        start: index + 1,
+        end: endIndex,
+      };
+    }
+  }
+
+  branches.push(current);
+  return branches;
+}
+
+function writeStructuredTextValue(
+  target: string,
+  value: number | boolean,
+  tags: Map<string, TagDefinition>
+): void {
+  const targetTag = tags.get(parseStructuredTextRef(target, tags).base);
+  const concreteTarget = toConcreteStructuredTextRef(target, tags);
+  if (targetTag?.dataType === "BOOL") {
+    writeBool(tags, concreteTarget, Boolean(value));
+  } else {
+    writeTagNumber(concreteTarget, Number(value) || 0, tags);
+  }
+}
+
+function executeStructuredTextCase(
+  lines: StLine[],
+  start: number,
+  end: number,
+  caseValue: number | boolean,
+  tags: Map<string, TagDefinition>
+): void {
+  const branches = collectStructuredTextCaseBranches(lines, start, end);
+  const numericCaseValue = Number(caseValue);
+  const selected = branches.find(branch =>
+    branch.isElse || branch.labels.some(label => isStructuredTextCaseLabelMatch(label, numericCaseValue, tags))
+  );
+  if (selected) executeStructuredTextBlock(lines, selected.start, selected.end, tags);
+}
+
+function collectStructuredTextCaseBranches(lines: StLine[], start: number, end: number) {
+  const branches: Array<{ labels: string[]; isElse: boolean; start: number; end: number }> = [];
+  let current: { labels: string[]; isElse: boolean; start: number; end: number } | null = null;
+  let depth = 0;
+
+  for (let index = start; index < end; index += 1) {
+    const text = lines[index].text;
+    const upper = normalizeStStatement(text);
+    if (isStBlockStart(upper)) depth += 1;
+    if (isEndStructuredTextStatement(upper)) depth = Math.max(0, depth - 1);
+
+    if (depth === 0) {
+      const branchMatch = text.match(/^(.+?)\s*:(?!=)\s*(.*)$/);
+      const isElse = upper === "ELSE";
+      if (isElse || branchMatch) {
+        if (current) {
+          current.end = index;
+          branches.push(current);
+        }
+        current = {
+          labels: isElse ? [] : branchMatch![1].split(",").map(label => label.trim()).filter(Boolean),
+          isElse,
+          start: index + 1,
+          end,
+        };
+        const inlineStatement = isElse ? "" : branchMatch![2].trim();
+        if (inlineStatement) {
+          lines.splice(index + 1, 0, { text: inlineStatement, lineNumber: lines[index].lineNumber });
+          end += 1;
+        }
+      }
+    }
+  }
+
+  if (current) {
+    current.end = end;
+    branches.push(current);
+  }
+  return branches;
+}
+
+function isStructuredTextCaseLabelMatch(label: string, caseValue: number, tags: Map<string, TagDefinition>): boolean {
+  const rangeMatch = label.match(/^(.+?)\.\.(.+)$/);
+  if (rangeMatch) {
+    const low = Number(evaluateStructuredTextExpression(rangeMatch[1], tags));
+    const high = Number(evaluateStructuredTextExpression(rangeMatch[2], tags));
+    return caseValue >= Math.min(low, high) && caseValue <= Math.max(low, high);
+  }
+  return caseValue === Number(evaluateStructuredTextExpression(label, tags));
+}
+
+function findStructuredTextBlock(
+  lines: StLine[],
+  start: number,
+  end: number,
+  opener: "IF" | "WHILE" | "FOR" | "CASE",
+  middleTokens: string[],
+  closeTokens: string[]
+): StBlockMarker {
+  let depth = 0;
+  for (let index = start + 1; index < end; index += 1) {
+    const upper = normalizeStStatement(lines[index].text);
+    if (isStBlockStart(upper)) {
+      depth += 1;
+      continue;
+    }
+    if (isEndStructuredTextStatement(upper)) {
+      if (depth > 0) {
+        depth -= 1;
+        continue;
+      }
+      if (closeTokens.includes(upper)) return { endIndex: index };
+    }
+    if (closeTokens.includes(upper)) {
+      if (depth === 0) return { endIndex: index };
+      depth -= 1;
+    }
+    if (depth === 0 && middleTokens.includes(upper)) {
+      const endMarker = findStructuredTextBlock(lines, index, end, opener, [], closeTokens);
+      return { elseIndex: index, endIndex: endMarker.endIndex };
+    }
+  }
+  return { endIndex: end };
+}
+
+function normalizeStStatement(line: string): string {
+  return line.toUpperCase().replace(/;$/, "").trim();
+}
+
+function isStBlockStart(upper: string): boolean {
+  return /^(IF\b.*\bTHEN|WHILE\b.*\bDO|FOR\b.*\bDO|CASE\b.*\bOF)/.test(upper);
+}
+
+function isEndStructuredTextStatement(upper: string): boolean {
+  return ["END_IF", "END_WHILE", "END_FOR", "END_CASE"].includes(upper);
+}
+
+function isCaseBranchLine(line: string): boolean {
+  const upper = normalizeStStatement(line);
+  const colonIndex = line.indexOf(":");
+  return upper === "ELSE" || (colonIndex >= 0 && line[colonIndex + 1] !== "=");
+}
+
+function isIfBranchLine(line: string): boolean {
+  const upper = normalizeStStatement(line);
+  return upper === "ELSE" || /^ELSIF\b.*\bTHEN$/.test(upper);
 }
 
 function evaluateStructuredTextExpression(expr: string, tags: Map<string, TagDefinition>): number | boolean {
   const jsExpr = toStructuredTextJavaScriptExpression(expr);
   try {
-    const fn = new Function("__read", `return (${jsExpr});`) as (reader: (ref: string) => number | boolean) => unknown;
-    const result = fn((ref) => readStructuredTextValue(ref, tags));
+    const fn = new Function("__read", "__fn", `return (${jsExpr});`) as (
+      reader: (ref: string) => number | boolean,
+      fnReader: (name: string) => (...args: number[]) => number
+    ) => unknown;
+    const result = fn(
+      (ref) => readStructuredTextValue(ref, tags),
+      (name) => getStructuredTextFunction(name)
+    );
     return typeof result === "boolean" ? result : Number(result) || 0;
   } catch {
     return 0;
@@ -397,6 +643,10 @@ function evaluateStructuredTextExpression(expr: string, tags: Map<string, TagDef
 
 function toStructuredTextJavaScriptExpression(expr: string): string {
   const keywords = new Set(["AND", "OR", "NOT", "MOD", "TRUE", "FALSE"]);
+  const functions = new Set([
+    "ABS", "SQR", "SQRT", "MIN", "MAX", "LIMIT",
+    "BAND", "BOR", "BXOR", "BNOT", "SHL", "SHR",
+  ]);
   let out = expr
     .replace(/<>/g, "!==")
     .replace(/\bAND\b/gi, "&&")
@@ -408,18 +658,76 @@ function toStructuredTextJavaScriptExpression(expr: string): string {
 
   out = out.replace(/(^|[^<>=!])=([^=])/g, "$1===$2");
 
-  return out.replace(/\b[A-Za-z_]\w*(?:\[\d+\])?(?:\.\w+)?\b/g, (token) => {
+  return out.replace(/\b[A-Za-z_]\w*(?:\[[^\]]+\])?(?:\.\w+)?\b/g, (token, offset, fullExpr) => {
     if (keywords.has(token.toUpperCase()) || token === "true" || token === "false") return token;
+    if (functions.has(token.toUpperCase()) && /^\s*\(/.test(fullExpr.slice(offset + token.length))) {
+      return `__fn(${JSON.stringify(token.toUpperCase())})`;
+    }
     if (/^\d/.test(token)) return token;
     return `__read(${JSON.stringify(token)})`;
   });
 }
 
+function getStructuredTextFunction(name: string): (...args: number[]) => number {
+  switch (name.toUpperCase()) {
+    case "ABS": return (value) => Math.abs(value);
+    case "SQR":
+    case "SQRT": return (value) => value < 0 ? 0 : Math.sqrt(value);
+    case "MIN": return (...values) => Math.min(...values);
+    case "MAX": return (...values) => Math.max(...values);
+    case "LIMIT": return (low, value, high) => Math.min(Math.max(value, low), high);
+    case "BAND": return (...values) => values.reduce((acc, value) => (acc & value) | 0, -1);
+    case "BOR": return (...values) => values.reduce((acc, value) => (acc | value) | 0, 0);
+    case "BXOR": return (...values) => values.reduce((acc, value) => (acc ^ value) | 0, 0);
+    case "BNOT": return (value) => (~value) | 0;
+    case "SHL": return (value, shift) => (value << (shift & 31)) | 0;
+    case "SHR": return (value, shift) => (value >>> (shift & 31)) | 0;
+    default: return () => 0;
+  }
+}
+
 function readStructuredTextValue(ref: string, tags: Map<string, TagDefinition>): number | boolean {
-  const tag = tags.get(parseTagRef(ref).base);
+  const tag = tags.get(parseStructuredTextRef(ref, tags).base);
+  const concreteRef = toConcreteStructuredTextRef(ref, tags);
   if (!tag) return 0;
-  if (tag.dataType === "BOOL") return readTagBit(tags, ref);
-  return readTagNumber(ref, tags);
+  if (tag.dataType === "BOOL") return readTagBit(tags, concreteRef);
+  return readTagNumber(concreteRef, tags);
+}
+
+function parseStructuredTextRef(refText: string, tags: Map<string, TagDefinition>): ParsedTagRef {
+  const match = refText.trim().match(/^([A-Za-z_]\w*)(?:\[([^\]]+)\])?(?:\.(\w+))?$/);
+  if (!match) return { base: refText };
+  const [, base, indexExpr, suffix] = match;
+  const tag = tags.get(base);
+  const ref: ParsedTagRef = { base };
+
+  if (indexExpr !== undefined) {
+    ref.idx = Number(evaluateStructuredTextExpression(indexExpr, tags)) | 0;
+  }
+
+  if (suffix !== undefined) {
+    const literalBit = Number(suffix);
+    if (!Number.isNaN(literalBit)) {
+      ref.bit = literalBit | 0;
+    } else if (tag?.dataType === "DINT" || tag?.dataType === "INT") {
+      ref.bit = Number(evaluateStructuredTextExpression(suffix, tags)) | 0;
+    } else {
+      ref.member = suffix.toUpperCase();
+    }
+  }
+
+  return ref;
+}
+
+function toConcreteStructuredTextRef(refText: string, tags: Map<string, TagDefinition>): string {
+  const ref = parseStructuredTextRef(refText, tags);
+  const index = ref.idx !== undefined ? `[${ref.idx}]` : "";
+  const suffix = ref.bit !== undefined
+    ? `.${ref.bit}`
+    : ref.member !== undefined
+      ? `.${ref.member}`
+      : "";
+  return `${ref.base}${index}${suffix}`;
 }
 
 function resolvePreset(

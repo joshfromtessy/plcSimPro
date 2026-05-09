@@ -151,6 +151,20 @@
   padding-left: 18px;
 }
 
+.help-code {
+  margin: 10px 0 16px;
+  padding: 14px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
+}
+
 .video-embed {
   position: relative;
   overflow: hidden;

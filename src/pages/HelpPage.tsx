@@ -42,6 +42,44 @@ export function HelpPage({ theme }: HelpPageProps) {
         </p>
       </section>
       <section className="page-card">
+        <h2>Structured Text Routines</h2>
+        <p>
+          Add a Structured Text routine with <strong>+ST</strong> in the program organizer.
+          ST routines use the same controller tags as ladder and can be called from ladder with JSR.
+        </p>
+        <ul>
+          <li>Supported statements include assignments, IF / ELSIF / ELSE, CASE, FOR, and WHILE.</li>
+          <li>Expressions support math, comparisons, BOOL logic, dynamic array indexing, and dynamic bit indexing.</li>
+          <li>Run mode shows live tag values inline beside referenced tags.</li>
+          <li>The editor includes syntax coloring, validation, keyword/function autocomplete, and arrow-key selection in autocomplete lists.</li>
+        </ul>
+      </section>
+      <section className="page-card">
+        <h2>Structured Text Examples</h2>
+        <p>Count the enabled bits in a DINT array element:</p>
+        <pre className="help-code">{`found := FALSE;
+bitCount := 0;
+
+FOR idx := 0 TO 31 DO
+  IF InputWords[0].idx THEN
+    found := TRUE;
+    bitCount := bitCount + 1;
+  END_IF;
+END_FOR;`}</pre>
+        <p>Use CASE and bitwise helpers:</p>
+        <pre className="help-code">{`CASE step OF
+  0:
+    motor := FALSE;
+  1:
+    motor := TRUE;
+  ELSE
+    step := 0;
+END_CASE;
+
+masked := BAND(InputWords[0], 16);
+shifted := SHL(1, idx);`}</pre>
+      </section>
+      <section className="page-card">
         <h2>Shortcuts</h2>
         <ul>
           <li>Arrow keys move selection between instructions.</li>

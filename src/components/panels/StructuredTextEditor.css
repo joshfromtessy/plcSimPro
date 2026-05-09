@@ -1,4 +1,12 @@
 .st-editor {
+  --st-token-text: #d4d4d4;
+  --st-token-keyword: #569cd6;
+  --st-token-function: #dcdcaa;
+  --st-token-variable: #9cdcfe;
+  --st-token-number: #b5cea8;
+  --st-token-comment: #6a9955;
+  --st-token-operator: #d4d4d4;
+  --st-token-literal: #569cd6;
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -7,6 +15,17 @@
   background: var(--bg-canvas);
   color: var(--text-primary);
   border-right: 1px solid var(--border);
+}
+
+[data-theme="light"] .st-editor {
+  --st-token-text: #000000;
+  --st-token-keyword: #0000ff;
+  --st-token-function: #795e26;
+  --st-token-variable: #001080;
+  --st-token-number: #098658;
+  --st-token-comment: #008000;
+  --st-token-operator: #000000;
+  --st-token-literal: #0000ff;
 }
 
 .st-header {
@@ -53,15 +72,16 @@
 .st-body {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  display: flex;
+  flex-direction: column;
 }
 
 .st-code-shell {
+  flex: 1;
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: 52px minmax(360px, 1fr) 260px;
+  grid-template-columns: 52px minmax(360px, 1fr);
   overflow: auto;
   background:
     linear-gradient(90deg, rgba(57, 132, 255, 0.06), transparent 170px),
@@ -69,8 +89,8 @@
 }
 
 .st-line-numbers,
-.st-line-live,
-.st-textarea {
+.st-textarea,
+.st-highlight {
   font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
   font-size: 13px;
   line-height: 22px;
@@ -85,34 +105,59 @@
   border-right: 1px solid var(--border);
 }
 
+.st-code-editor {
+  position: relative;
+  min-width: 0;
+  min-height: 100%;
+}
+
+.st-highlight,
 .st-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 16px;
+  border: none;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: normal;
+}
+
+.st-highlight {
+  color: var(--st-token-text);
+  background: transparent;
+  pointer-events: none;
+}
+
+.st-textarea {
+  position: absolute;
+  inset: 0;
   min-height: 100%;
   resize: none;
-  border: none;
   outline: none;
-  padding: 16px;
-  color: var(--text-primary);
+  overflow: hidden;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
   background: transparent;
   caret-color: var(--accent-blue);
-  tab-size: 2;
 }
 
 .st-textarea::placeholder {
   color: var(--text-dim);
+  -webkit-text-fill-color: var(--text-dim);
 }
 
-.st-line-live {
-  padding: 16px 12px;
-  color: var(--accent-yellow);
-  background: rgba(255, 170, 0, 0.035);
-  border-left: 1px solid var(--border);
+.st-validation-strip {
+  flex-shrink: 0;
+  display: flex;
+  gap: 12px;
+  min-height: 24px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-toolbar);
+  overflow-x: auto;
   white-space: nowrap;
-  user-select: none;
-}
-
-.st-line-live div {
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .st-live-panel {
@@ -142,13 +187,31 @@
   line-height: 1.5;
 }
 
+.st-autocomplete,
 .st-suggestion-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.st-autocomplete {
+  position: absolute;
+  z-index: 5;
+  width: 220px;
+  max-height: 220px;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--accent-blue);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38);
+}
+
+.st-suggestion-list {
   margin-bottom: 10px;
 }
 
+.st-autocomplete button,
 .st-suggestion-list button {
   display: flex;
   align-items: center;
@@ -165,23 +228,51 @@
   font-size: 11px;
 }
 
+.st-autocomplete button:hover,
+.st-autocomplete-active,
 .st-suggestion-list button:hover {
   border-color: var(--accent-blue);
   background: var(--accent-blue-bg);
   color: var(--accent-blue);
 }
 
+.st-autocomplete em,
 .st-suggestion-list em {
   color: var(--text-dim);
   font-size: 10px;
   font-style: normal;
 }
 
+.st-autocomplete-item--keyword span,
+.st-autocomplete-item--operator span {
+  color: var(--st-token-keyword);
+  font-weight: 800;
+}
+
+.st-autocomplete-item--function span {
+  color: var(--st-token-function);
+  font-weight: 800;
+}
+
+.st-autocomplete-item--operator span {
+  color: var(--st-token-operator);
+}
+
+.st-autocomplete-hint {
+  padding: 3px 4px 0;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
 .st-valid {
-  margin-bottom: 18px;
   color: var(--accent-green);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.st-error-inline {
+  color: var(--accent-red);
+  font-size: 12px;
 }
 
 .st-error-list {
@@ -211,45 +302,70 @@
   line-height: 1.35;
 }
 
-.st-syntax-preview {
-  max-height: 180px;
-  margin: 0 0 18px;
-  padding: 10px;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-app);
-  color: var(--text-secondary);
-  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.55;
-  white-space: pre;
-}
-
 .st-preview-line {
-  min-height: 1.55em;
+  min-height: 22px;
 }
 
 .st-token-keyword {
-  color: var(--accent-blue);
+  color: var(--st-token-keyword);
   font-weight: 800;
 }
 
 .st-token-tag {
-  color: var(--accent-green);
+  color: var(--st-token-variable);
+}
+
+.st-token-tag-wrap {
+  display: inline;
+}
+
+.st-inline-chip {
+  display: inline-block;
+  min-width: 18px;
+  margin: 0 3px;
+  padding: 0 5px;
+  border: 1px solid rgba(155, 195, 255, 0.95);
+  border-radius: 2px;
+  background: rgba(57, 132, 255, 0.28);
+  color: #e7f0ff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 15px;
+  text-align: center;
+  vertical-align: 1px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.22),
+    0 0 0 1px rgba(57, 132, 255, 0.12);
 }
 
 .st-token-number {
-  color: var(--accent-yellow);
+  color: var(--st-token-number);
+}
+
+.st-token-function {
+  color: var(--st-token-function);
+}
+
+.st-token-literal {
+  color: var(--st-token-literal);
+  font-weight: 800;
 }
 
 .st-token-operator {
-  color: var(--text-primary);
+  color: var(--st-token-operator);
+}
+
+.st-token-operator-keyword {
+  font-weight: 800;
 }
 
 .st-token-comment {
-  color: var(--text-dim);
+  color: var(--st-token-comment);
   font-style: italic;
+}
+
+.st-placeholder {
+  color: var(--text-dim);
 }
 
 .st-live-tag {

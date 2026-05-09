@@ -358,6 +358,11 @@ export class LadderRenderer {
     tagValues: Map<string, boolean> = new Map(),
     canvasH = 0
   ): { h: number; w: number } {
+    this.app.stage.position.set(0, 0);
+    this.app.stage.scale.set(1, 1);
+    this._stage.position.set(0, 0);
+    this._stage.scale.set(1, 1);
+
     this._tagValues = tagValues;
     const visualRungs = this._buildVisualRungs(rungs);
     // Remove stale rungs
@@ -1032,6 +1037,8 @@ export class LadderRenderer {
       const isMathInst = ["ADD","SUB","MUL","DIV","MOD","NEG","ABS","SQR","CLR"].includes(node.type);
       const isUnaryMath = ["NEG","ABS","SQR","CLR"].includes(node.type);
       const isJsrInst = node.type === "JSR";
+      const headerY = isJsrInst ? by + 13 : wireY - 5;
+      const dividerY = isJsrInst ? by + 24 : wireY + 4;
 
       if (selected) {
         g.roundRect(bx - 2, by - 2, bw + 4, bh + 4, 5)
@@ -1048,11 +1055,11 @@ export class LadderRenderer {
       // Mnemonic in header
       const mn = new Text({ text: node.type, style: mnStyle });
       mn.anchor.set(0.5, 0.5);
-      mn.position.set(cx, wireY - 5);
+      mn.position.set(cx, headerY);
       container.addChild(mn);
 
       // Divider
-      g.moveTo(bx + 1, wireY + 4).lineTo(bx + bw - 1, wireY + 4)
+      g.moveTo(bx + 1, dividerY).lineTo(bx + bw - 1, dividerY)
         .stroke({ color: powered ? C.nodeOn : C.nodeBorder, width: 1 });
 
       // Row styles
@@ -1061,13 +1068,13 @@ export class LadderRenderer {
       const destSt  = new TextStyle({ fontFamily: "Consolas, monospace", fontSize: 10, fill: powered ? C.textGreen : C.textYellow });
       const liveSt  = new TextStyle({ fontFamily: "Consolas, monospace", fontSize: 10, fill: powered ? C.textGreen : C.textDim, fontWeight: "bold" });
 
-      const drawOperandRow = (label: string, operand: string, rowY: number, style: TextStyle) => {
+      const drawOperandRow = (label: string, operand: string, rowY: number, style: TextStyle, valueX = bx + 27) => {
         const lbl = new Text({ text: label, style: labelSt });
         lbl.anchor.set(0, 0.5); lbl.position.set(bx + 4, rowY);
         container.addChild(lbl);
 
         const name = new Text({ text: this._truncMiddleOperand(operand), style });
-        name.anchor.set(0, 0.5); name.position.set(bx + 27, rowY);
+        name.anchor.set(0, 0.5); name.position.set(valueX, rowY);
         container.addChild(name);
 
         const liveValue = this._formatLiveValue(operand);
@@ -1078,7 +1085,7 @@ export class LadderRenderer {
         }
       };
 
-      const rowYs  = [wireY + 18, wireY + 36];
+      const rowYs  = isJsrInst ? [dividerY + 18] : [wireY + 18, wireY + 36];
       let labels: string[], values: string[];
 
         if (isJsrInst) {
@@ -1137,7 +1144,7 @@ export class LadderRenderer {
         }
 
       for (let i = 0; i < labels.length; i++) {
-        drawOperandRow(labels[i], values[i], rowYs[i], i === 1 && isMovInst ? destSt : valSt);
+        drawOperandRow(labels[i], values[i], rowYs[i], i === 1 && isMovInst ? destSt : valSt, isJsrInst ? bx + 48 : undefined);
       }
 
     } else if (isComplex) {

@@ -99,8 +99,8 @@
 }
 
 .program-row {
-  grid-template-columns: 18px 1fr auto;
-  gap: 4px;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  gap: 3px;
   padding: 5px 8px;
 }
 
@@ -150,18 +150,18 @@
 
 .routine-add-group {
   display: flex;
-  gap: 3px;
+  gap: 2px;
 }
 
 .routine-add-btn {
-  min-width: 34px;
+  min-width: 30px;
   height: 22px;
-  padding: 0 5px;
+  padding: 0 4px;
   border-radius: 3px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-dim);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   line-height: 1;
 }
