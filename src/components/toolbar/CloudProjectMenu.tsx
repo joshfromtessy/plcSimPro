@@ -43,21 +43,21 @@ export function CloudProjectMenu() {
   }
 
   return (
-    <div className="cloud-project-menu" ref={menuRef}>
-      <button className="toolbar-btn" onClick={handleSave} disabled={loading}>
-        Cloud Save
-      </button>
+    <div className="toolbar-menu" ref={menuRef}>
       <button className="toolbar-btn" onClick={() => setOpen((value) => !value)}>
-        Cloud Open
+        Cloud
       </button>
       {open && (
-        <div className="cloud-project-popover">
+        <div className="toolbar-popover cloud-project-popover">
           <div className="cloud-project-popover-head">
             <span>Cloud Projects</span>
             <button onClick={() => void refreshProjects()} disabled={loading}>
               Refresh
             </button>
           </div>
+          <button className="toolbar-menu-row primary" onClick={handleSave} disabled={loading}>
+            Save current project
+          </button>
           {error && (
             <button className="cloud-project-error" onClick={clearError}>
               {error}
@@ -68,6 +68,7 @@ export function CloudProjectMenu() {
               Saved {new Date(lastSavedAt).toLocaleString()}
             </div>
           )}
+          <div className="cloud-project-section-label">Open saved project</div>
           {loading && <div className="cloud-project-empty">Working...</div>}
           {!loading && projects.length === 0 && (
             <div className="cloud-project-empty">No cloud projects yet.</div>

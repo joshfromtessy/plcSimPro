@@ -23,9 +23,26 @@
   background: var(--border-light);
 }
 
-.toolbar-project-name {
-  font-size: 12px;
+.toolbar-project-name-input {
+  width: clamp(120px, 14vw, 220px);
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
   color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.toolbar-project-name-input:hover {
+  border-color: var(--border-light);
+  background: var(--bg-panel);
+}
+
+.toolbar-project-name-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  background: var(--bg-panel);
+  color: var(--text-primary);
 }
 
 .toolbar-left,
@@ -89,33 +106,105 @@
   font-size: 14px;
 }
 
-.auth-chip {
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cloud-project-menu {
+.toolbar-menu {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
-.cloud-project-popover {
+.toolbar-popover {
   position: absolute;
   top: calc(100% + 8px);
   left: 0;
   z-index: 40;
-  width: 280px;
-  max-height: 360px;
-  overflow-y: auto;
   padding: 8px;
   background: var(--bg-panel);
   border: 1px solid var(--border-light);
   border-radius: 8px;
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+}
+
+.file-popover {
+  width: 180px;
+}
+
+.cloud-project-popover {
+  width: 300px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.account-popover {
+  left: auto;
+  right: 0;
+  width: 240px;
+}
+
+.toolbar-menu-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 30px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+  text-decoration: none;
+}
+
+.toolbar-menu-row:hover {
+  background: var(--accent-blue-bg);
+  color: var(--accent-blue);
+}
+
+.toolbar-menu-row.primary {
+  border: 1px solid rgba(74, 140, 255, 0.45);
+  background: var(--accent-blue-bg);
+  color: var(--accent-blue);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.toolbar-menu-row.danger {
+  color: var(--accent-red);
+}
+
+.toolbar-menu-row.danger:hover {
+  background: rgba(255, 68, 85, 0.12);
+}
+
+.toolbar-link-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.toolbar-link-btn:hover {
+  background: var(--bg-panel);
+  border-color: var(--border-light);
+  color: var(--accent-blue);
+}
+
+.account-menu-trigger {
+  min-width: 70px;
+  justify-content: center;
+}
+
+.account-email {
+  overflow: hidden;
+  padding: 7px 9px 9px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cloud-project-popover-head {
@@ -153,6 +242,15 @@
   background: transparent;
   color: var(--text-primary);
   text-align: left;
+}
+
+.cloud-project-section-label {
+  padding: 8px 8px 4px;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 .cloud-project-row:hover {

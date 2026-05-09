@@ -1,10 +1,12 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useSimulationStore } from "../../store/simulationStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useAuthStore } from "../../store/authStore";
 import type { PlcProject } from "../../model/types";
 import { CloudProjectMenu } from "./CloudProjectMenu";
+import { AccountMenu } from "./AccountMenu";
+import { FileMenu } from "./FileMenu";
 import "./Toolbar.css";
 
 interface ToolbarProps {
@@ -14,9 +16,10 @@ interface ToolbarProps {
 
 export function Toolbar({ theme, onToggleTheme }: ToolbarProps) {
   const { mode, start, stop, singleScan, scanIntervalMs, setScanInterval } = useSimulationStore();
-  const { user, signOut } = useAuthStore();
+  const { user } = useAuthStore();
   const {
     project,
+    setProjectName,
     newProject,
     loadProject,
     setOnlineEditActive,
@@ -24,11 +27,22 @@ export function Toolbar({ theme, onToggleTheme }: ToolbarProps) {
     cancelOnlineEdits,
   } = useProjectStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [nameDraft, setNameDraft] = useState(project.name);
   const hasOnlineEdits = project.programs.some((program) =>
     program.routines.some((routine) =>
       routine.rungs.some((rung) => rung.onlineEditStatus)
     )
   );
+
+  useEffect(() => {
+    setNameDraft(project.name);
+  }, [project.name]);
+
+  function commitProjectName() {
+    const next = nameDraft.trim() || "Untitled Project";
+    if (next !== project.name) setProjectName(next);
+    else setNameDraft(project.name);
+  }
 
   function handleBranchDragStart(e: React.DragEvent) {
     e.dataTransfer.effectAllowed = "copy";
@@ -103,20 +117,24 @@ export function Toolbar({ theme, onToggleTheme }: ToolbarProps) {
       <div className="toolbar-left">
         <span className="toolbar-brand">PLC Sim</span>
         <span className="toolbar-divider" />
-        <span className="toolbar-project-name">{project.name}</span>
+        <input
+          className="toolbar-project-name-input"
+          value={nameDraft}
+          aria-label="Project name"
+          title="Rename project"
+          onChange={(e) => setNameDraft(e.target.value)}
+          onBlur={commitProjectName}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.currentTarget.blur();
+            } else if (e.key === "Escape") {
+              setNameDraft(project.name);
+              e.currentTarget.blur();
+            }
+          }}
+        />
         <span className="toolbar-divider" />
-        <button className="toolbar-btn" onClick={handleNew} title="New project">
-          <NewIcon />
-          <span>New</span>
-        </button>
-        <button className="toolbar-btn" onClick={handleSave} title="Save project as .plcsim">
-          <SaveIcon />
-          <span>Save</span>
-        </button>
-        <button className="toolbar-btn" onClick={handleLoad} title="Open .plcsim file">
-          <LoadIcon />
-          <span>Open</span>
-        </button>
+        <FileMenu onNew={handleNew} onSave={handleSave} onOpen={handleLoad} />
         {user && <CloudProjectMenu />}
         {/* Hidden file input for open dialog */}
         <input
@@ -208,48 +226,13 @@ export function Toolbar({ theme, onToggleTheme }: ToolbarProps) {
           <NavLink to="/" end>Editor</NavLink>
           <NavLink to="/help">Help</NavLink>
           <NavLink to="/about">About</NavLink>
-          <NavLink to={user ? "/account" : "/login"}>
-            {user ? "Account" : "Login"}
-          </NavLink>
         </nav>
-        {user && (
-          <button className="toolbar-btn auth-chip" onClick={signOut} title={user.email ?? "Signed in"}>
-            {user.email ?? "Account"}
-          </button>
-        )}
+        <AccountMenu />
         <button className="toolbar-btn icon-btn" onClick={onToggleTheme} title="Toggle theme">
           {theme === "dark" ? "Light" : "Dark"}
         </button>
       </div>
     </div>
-  );
-}
-
-function NewIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <rect x="1.5" y="1.5" width="10" height="10" rx="1" />
-      <path d="M6.5 4v5M4 6.5h5" />
-    </svg>
-  );
-}
-
-function SaveIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M2 2h7l2 2v7a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
-      <rect x="3.5" y="7" width="6" height="4" rx="0.5" fill="currentColor" stroke="none" opacity="0.35" />
-      <path d="M4.5 2v3h4V2" />
-    </svg>
-  );
-}
-
-function LoadIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h3l1.5 1.5H11A1.5 1.5 0 0 1 12.5 5v5A1.5 1.5 0 0 1 11 11.5H2A1.5 1.5 0 0 1 .5 10V3.5" />
-      <path d="M6.5 5.5v4M4.5 7.5l2 2 2-2" />
-    </svg>
   );
 }
 
