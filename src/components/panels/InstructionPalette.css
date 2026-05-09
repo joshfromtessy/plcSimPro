@@ -1,0 +1,174 @@
+.palette {
+  width: var(--palette-w);
+  flex-shrink: 0;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.palette-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-toolbar);
+  flex-shrink: 0;
+}
+
+/* ── Group ──────────────────────────────────────────────────────────────── */
+
+.palette-group {
+  border-bottom: 1px solid var(--border);
+}
+
+.palette-group-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 5px 10px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.12s;
+}
+
+.palette-group-label:hover {
+  color: var(--text-secondary);
+}
+
+.palette-group-chevron {
+  font-size: 12px;
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+
+.palette-group-chevron--closed {
+  transform: rotate(-90deg);
+}
+
+/* ── Slide animation via CSS grid rows ──────────────────────────────────── */
+/* grid-template-rows transitions from 1fr → 0fr smoothly without needing   */
+/* a fixed max-height, giving a perfect accordion expand/collapse effect.    */
+
+.palette-group-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity            0.18s ease;
+  opacity: 1;
+}
+
+.palette-group-body--closed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.palette-group-body-inner {
+  overflow: hidden;
+  padding-bottom: 2px;
+}
+
+/* ── Items ──────────────────────────────────────────────────────────────── */
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  cursor: grab;
+  transition: background 0.1s;
+  min-width: 0;       /* allow children to shrink/truncate */
+}
+
+.palette-item:hover {
+  background: var(--accent-blue-bg);
+}
+
+.palette-item:active {
+  cursor: grabbing;
+}
+
+.palette-item-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  opacity: 0.85;
+}
+
+.palette-item-mnemonic {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.palette-item-sep {
+  color: var(--text-dim);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.palette-item-desc {
+  font-size: 9.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* ── Per-group accent colours ───────────────────────────────────────────── */
+
+.palette-group--contact .palette-item-icon,
+.palette-group--contact .palette-item-mnemonic {
+  color: var(--accent-blue);
+}
+
+.palette-group--output .palette-item-icon,
+.palette-group--output .palette-item-mnemonic {
+  color: var(--accent-yellow);
+}
+
+.palette-group--timer .palette-item-icon,
+.palette-group--timer .palette-item-mnemonic {
+  color: var(--accent-green);
+}
+
+.palette-group--counter .palette-item-icon,
+.palette-group--counter .palette-item-mnemonic {
+  color: var(--accent-purple);
+}
+
+.palette-group--compare .palette-item-icon,
+.palette-group--compare .palette-item-mnemonic {
+  color: var(--accent-yellow);
+}
+
+.palette-group--move .palette-item-icon,
+.palette-group--move .palette-item-mnemonic {
+  color: var(--accent-red);
+}
+
+.palette-group--math .palette-item-icon,
+.palette-group--math .palette-item-mnemonic {
+  color: var(--accent-green);
+}
+
+.palette-group--program .palette-item-icon,
+.palette-group--program .palette-item-mnemonic {
+  color: var(--accent-blue);
+}

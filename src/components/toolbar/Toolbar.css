@@ -1,0 +1,176 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  height: var(--toolbar-h);
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+  gap: 8px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.toolbar-brand {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--accent-blue);
+  letter-spacing: 0.5px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-light);
+}
+
+.toolbar-project-name {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.toolbar-left,
+.toolbar-center,
+.toolbar-tools,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-left { flex: 1; }
+.toolbar-center { flex: 0 0 auto; }
+.toolbar-tools { flex: 0 0 auto; }
+.toolbar-right { flex: 1; justify-content: flex-end; }
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+  font-size: 12px;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background: var(--bg-panel-alt);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-btn.active {
+  background: rgba(255, 68, 85, 0.15);
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.tool-drag-btn {
+  cursor: grab;
+}
+
+.tool-drag-btn:active {
+  cursor: grabbing;
+}
+
+.icon-btn {
+  padding: 4px 8px;
+  font-size: 14px;
+}
+
+.toolbar-sim-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.online-edit-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 4px;
+  border-left: 1px solid var(--border-light);
+}
+
+.toolbar-btn.online-edit-accept {
+  border-color: rgba(34, 204, 102, 0.65);
+  color: var(--accent-green);
+}
+
+.toolbar-btn.online-edit-accept:hover:not(:disabled) {
+  background: rgba(34, 204, 102, 0.12);
+  border-color: var(--accent-green);
+}
+
+.toolbar-btn.online-edit-cancel {
+  border-color: rgba(255, 68, 85, 0.65);
+  color: var(--accent-red);
+}
+
+.toolbar-btn.online-edit-cancel:hover:not(:disabled) {
+  background: rgba(255, 68, 85, 0.12);
+  border-color: var(--accent-red);
+}
+
+.task-period-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.task-period-control input {
+  width: 54px;
+  padding: 2px 4px;
+  background: var(--bg-app);
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  color: var(--accent-yellow);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+}
+
+.task-period-control input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.task-period-control input::-webkit-inner-spin-button,
+.task-period-control input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
+
+.sim-mode-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sim-mode-badge.stopped {
+  background: rgba(80, 80, 96, 0.4);
+  color: var(--text-dim);
+}
+
+.sim-mode-badge.running {
+  background: rgba(34, 204, 102, 0.2);
+  color: var(--accent-green);
+}
+
+.sim-mode-badge.single-scan {
+  background: rgba(74, 140, 255, 0.2);
+  color: var(--accent-blue);
+}

@@ -1,0 +1,99 @@
+/* ============================================================
+   PLC Sim — Global CSS variables + reset
+   ============================================================ */
+
+:root {
+  /* Dark theme (default) */
+  --bg-app:         #1a1a1f;
+  --bg-panel:       #22222a;
+  --bg-panel-alt:   #1e1e26;
+  --bg-canvas:      #18181e;
+  --bg-rung:        #1c1c23;
+  --bg-toolbar:     #16161c;
+
+  --border:         #2e2e3a;
+  --border-light:   #3a3a4a;
+
+  --text-primary:   #e8e8f0;
+  --text-secondary: #9090a8;
+  --text-dim:       #505060;
+
+  /* Accent colours */
+  --accent-blue:    #4a8cff;
+  --accent-blue-bg: rgba(74, 140, 255, 0.12);
+  --accent-green:   #22cc66;
+  --accent-red:     #ff4455;
+  --accent-yellow:  #f0b429;
+  --accent-purple:  #9b71ea;
+
+  /* Ladder-specific */
+  --wire-inactive:  #4a4a5a;
+  --wire-powered:   #22cc66;
+  --wire-rail:      #6060a0;
+  --node-bg:        #28283a;
+  --node-border:    #3c3c58;
+  --node-selected:  var(--accent-blue);
+  --node-error:     var(--accent-red);
+  --node-powered:   var(--accent-green);
+  --node-powered-bg:#0a1f12;
+
+  /* Layout dimensions */
+  --toolbar-h:      42px;
+  --palette-w:      200px;
+  --props-w:        240px;
+  --statusbar-h:    24px;
+  --rung-number-w:  48px;
+}
+
+[data-theme="light"] {
+  --bg-app:         #f0f0f5;
+  --bg-panel:       #ffffff;
+  --bg-panel-alt:   #f8f8fc;
+  --bg-canvas:      #e8e8f0;
+  --bg-rung:        #ffffff;
+  --bg-toolbar:     #e0e0ea;
+  --border:         #c8c8d8;
+  --border-light:   #d8d8e8;
+  --text-primary:   #1a1a2a;
+  --text-secondary: #50507a;
+  --text-dim:       #a0a0b8;
+  --wire-inactive:  #9090b0;
+  --wire-rail:      #6868a8;
+  --node-bg:        #f0f0fa;
+  --node-border:    #9090b8;
+  --node-powered-bg:#e8fff0;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-app);
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+input, select {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-panel); }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
