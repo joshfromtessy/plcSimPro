@@ -7,9 +7,10 @@ interface PageShellProps {
   title: string;
   eyebrow: string;
   children: ReactNode;
+  contentClassName?: string;
 }
 
-export function PageShell({ theme, title, eyebrow, children }: PageShellProps) {
+export function PageShell({ theme, title, eyebrow, children, contentClassName = "" }: PageShellProps) {
   const user = useAuthStore((s) => s.user);
 
   return (
@@ -25,7 +26,7 @@ export function PageShell({ theme, title, eyebrow, children }: PageShellProps) {
           </NavLink>
         </nav>
       </header>
-      <main className="page-content">
+      <main className={`page-content ${contentClassName}`.trim()}>
         <p className="page-eyebrow">{eyebrow}</p>
         <h1>{title}</h1>
         {children}

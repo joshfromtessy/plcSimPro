@@ -35,6 +35,7 @@ export function AuthPage({ theme, mode }: AuthPageProps) {
       theme={theme}
       eyebrow="Account"
       title={isSignup ? "Create Account" : "Log In"}
+      contentClassName="page-content--auth"
     >
       <section className="page-card auth-card">
         {!isSupabaseConfigured ? (

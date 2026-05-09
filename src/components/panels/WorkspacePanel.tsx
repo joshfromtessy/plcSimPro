@@ -121,7 +121,7 @@ function ProgramTree() {
                     onClick={() => handleAddRoutine(program.id, program.routines.length, "LAD")}
                     title="Add ladder routine"
                   >
-                    +L
+                    +LAD
                   </button>
                   <button
                     className="routine-add-btn routine-add-btn--st"
@@ -129,7 +129,7 @@ function ProgramTree() {
                     onClick={() => handleAddRoutine(program.id, program.routines.length, "ST")}
                     title="Add structured text routine"
                   >
-                    +S
+                    +ST
                   </button>
                 </div>
               </div>
