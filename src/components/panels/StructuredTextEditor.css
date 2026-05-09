@@ -211,6 +211,47 @@
   line-height: 1.35;
 }
 
+.st-syntax-preview {
+  max-height: 180px;
+  margin: 0 0 18px;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-app);
+  color: var(--text-secondary);
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.st-preview-line {
+  min-height: 1.55em;
+}
+
+.st-token-keyword {
+  color: var(--accent-blue);
+  font-weight: 800;
+}
+
+.st-token-tag {
+  color: var(--accent-green);
+}
+
+.st-token-number {
+  color: var(--accent-yellow);
+}
+
+.st-token-operator {
+  color: var(--text-primary);
+}
+
+.st-token-comment {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
 .st-live-tag {
   display: flex;
   align-items: center;

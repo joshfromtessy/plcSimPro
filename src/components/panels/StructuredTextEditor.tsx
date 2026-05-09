@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Routine, TagDefinition } from "../../model/types";
 import { useProjectStore } from "../../store/projectStore";
 import { useSimulationStore } from "../../store/simulationStore";
@@ -25,6 +25,10 @@ export function StructuredTextEditor({ routine }: StructuredTextEditorProps) {
   );
   const validationErrors = useMemo(
     () => validateStructuredText(source, project.tags),
+    [source, project.tags]
+  );
+  const syntaxPreview = useMemo(
+    () => renderSyntaxPreview(source, project.tags),
     [source, project.tags]
   );
   const currentToken = getTokenAt(source, cursorIndex);
@@ -130,6 +134,11 @@ export function StructuredTextEditor({ routine }: StructuredTextEditorProps) {
               ))}
             </div>
           )}
+
+          <div className="st-live-title st-live-title--spaced">Syntax Preview</div>
+          <pre className="st-syntax-preview" aria-label="Structured Text syntax preview">
+            {syntaxPreview}
+          </pre>
 
           <div className="st-live-title">Referenced Tags</div>
           {referencedTags.length === 0 ? (
@@ -245,6 +254,50 @@ function getTagSuggestions(tags: TagDefinition[], token: { text: string }): TagD
       return aStarts - bStarts || a.name.localeCompare(b.name);
     })
     .slice(0, 8);
+}
+
+function renderSyntaxPreview(source: string, tags: TagDefinition[]): ReactNode[] {
+  const tagNames = new Set(tags.map(tag => tag.name.toUpperCase()));
+  const lines = source.split(/\r?\n/);
+  return lines.flatMap((line, lineIndex) => [
+    <span key={`l-${lineIndex}`} className="st-preview-line">
+      {renderSyntaxLine(line, tagNames)}
+    </span>,
+    lineIndex < lines.length - 1 ? "\n" : "",
+  ]);
+}
+
+function renderSyntaxLine(line: string, tagNames: Set<string>): ReactNode[] {
+  const commentIndex = line.indexOf("//");
+  const code = commentIndex >= 0 ? line.slice(0, commentIndex) : line;
+  const comment = commentIndex >= 0 ? line.slice(commentIndex) : "";
+  const parts: ReactNode[] = [];
+  const tokenPattern = /\b[A-Za-z_]\w*(?:\[\d+\])?(?:\.\w+)?\b|\d+(?:\.\d+)?|:=|<>|<=|>=|[=+\-*/();]/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = tokenPattern.exec(code)) !== null) {
+    if (match.index > cursor) parts.push(code.slice(cursor, match.index));
+    parts.push(renderSyntaxToken(match[0], tagNames, `${match.index}-${match[0]}`));
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < code.length) parts.push(code.slice(cursor));
+  if (comment) parts.push(<span key="comment" className="st-token-comment">{comment}</span>);
+  return parts;
+}
+
+function renderSyntaxToken(token: string, tagNames: Set<string>, key: string): ReactNode {
+  const upper = token.toUpperCase();
+  if (["IF", "THEN", "ELSE", "END_IF", "TRUE", "FALSE", "AND", "OR", "NOT", "MOD"].includes(upper)) {
+    return <span key={key} className="st-token-keyword">{token}</span>;
+  }
+  if (/^\d/.test(token)) return <span key={key} className="st-token-number">{token}</span>;
+  if ([":=", "<>", "<=", ">=", "=", "+", "-", "*", "/", "(", ")", ";"].includes(token)) {
+    return <span key={key} className="st-token-operator">{token}</span>;
+  }
+  const base = token.match(/^([A-Za-z_]\w*)/)?.[1].toUpperCase();
+  if (base && tagNames.has(base)) return <span key={key} className="st-token-tag">{token}</span>;
+  return <span key={key}>{token}</span>;
 }
 
 function getAssignmentTarget(line: string): string | null {
