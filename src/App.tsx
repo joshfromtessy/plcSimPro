@@ -1,23 +1,27 @@
 import { useState } from "react";
-import { Toolbar } from "./components/toolbar/Toolbar";
-import { InstructionPalette } from "./components/panels/InstructionPalette";
-import { PixiCanvas } from "./canvas/PixiCanvas";
-import { WorkspacePanel } from "./components/panels/WorkspacePanel";
-import { StatusBar } from "./components/panels/StatusBar";
+import { Route, Routes } from "react-router-dom";
+import { EditorPage } from "./pages/EditorPage";
+import { AboutPage } from "./pages/AboutPage";
+import { HelpPage } from "./pages/HelpPage";
 import "./App.css";
 
 export default function App() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   return (
-    <div className="app-root" data-theme={theme}>
-      <Toolbar theme={theme} onToggleTheme={() => setTheme(t => t === "dark" ? "light" : "dark")} />
-      <div className="app-body">
-        <WorkspacePanel />
-        <PixiCanvas />
-        <InstructionPalette />
-      </div>
-      <StatusBar />
-    </div>
+    <Routes>
+      <Route
+        path="/"
+        element={
+          <EditorPage
+            theme={theme}
+            onToggleTheme={() => setTheme(t => t === "dark" ? "light" : "dark")}
+          />
+        }
+      />
+      <Route path="/help" element={<HelpPage theme={theme} />} />
+      <Route path="/about" element={<AboutPage theme={theme} />} />
+      <Route path="*" element={<HelpPage theme={theme} />} />
+    </Routes>
   );
 }

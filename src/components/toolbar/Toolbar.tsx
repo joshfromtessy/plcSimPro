@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { NavLink } from "react-router-dom";
 import { useSimulationStore } from "../../store/simulationStore";
 import { useProjectStore } from "../../store/projectStore";
 import type { PlcProject } from "../../model/types";
@@ -199,6 +200,11 @@ export function Toolbar({ theme, onToggleTheme }: ToolbarProps) {
 
       {/* Right: theme toggle */}
       <div className="toolbar-right">
+        <nav className="toolbar-nav" aria-label="Site">
+          <NavLink to="/" end>Editor</NavLink>
+          <NavLink to="/help">Help</NavLink>
+          <NavLink to="/about">About</NavLink>
+        </nav>
         <button className="toolbar-btn icon-btn" onClick={onToggleTheme} title="Toggle theme">
           {theme === "dark" ? "Light" : "Dark"}
         </button>

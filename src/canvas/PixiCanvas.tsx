@@ -2,7 +2,7 @@
 // PixiCanvas â€” React component that owns the Pixi Application
 // =============================================================================
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Application } from "pixi.js";
 import { useProjectStore } from "../store/projectStore";
 import { useSimulationStore } from "../store/simulationStore";
@@ -31,7 +31,11 @@ type TagDropPreview = {
   valid: boolean;
 };
 
-export function PixiCanvas() {
+interface PixiCanvasProps {
+  theme: "dark" | "light";
+}
+
+export function PixiCanvas({ theme }: PixiCanvasProps) {
   const canvasRef   = useRef<HTMLDivElement>(null);
   const outerRef    = useRef<HTMLDivElement>(null);
   const appRef      = useRef<Application | null>(null);
@@ -85,6 +89,7 @@ export function PixiCanvas() {
   const routine = activeRoutineId
     ? project.programs.flatMap(p => p.routines).find(r => r.id === activeRoutineId)
     : null;
+  const canvasBackground = theme === "light" ? "#e8e8f0" : "#18181e";
 
   // Build a tag-value map for XIO/XIC colouring (updated every render)
   const tagValues = new Map<string, boolean>(
@@ -95,10 +100,11 @@ export function PixiCanvas() {
     const lr  = rendererRef.current;
     const app = appRef.current;
     if (!lr || !app || !routine) return;
-    syncPixiBackground(app, canvasRef.current);
-    lr.setThemeColors(readRendererColors(canvasRef.current));
+    syncPixiBackground(app, theme);
+    lr.setThemeColors(getRendererColors(theme));
     lr.setTagData(project.tags);
     const w = canvasRef.current?.clientWidth ?? app.renderer.width;
+    const viewportH = canvasRef.current?.clientHeight ?? app.renderer.height;
     if (w === 0) return;
     const selectedNodeId = selection?.kind === "node" ? selection.nodeId : null;
     const selectedRungId = selection?.kind === "rung" ? selection.rungId : null;
@@ -112,12 +118,16 @@ export function PixiCanvas() {
       ? routine.rungs.map(r => preview.get(r.id) ?? r)
       : routine.rungs;
 
-    const { h: contentH, w: contentW } = lr.render(rungs, scanResult, w, tagValues);
+    const { h: contentH, w: contentW } = lr.render(rungs, scanResult, w, tagValues, viewportH);
     if (contentH > 0) {
       const newW = Math.max(w, contentW);
-      app.renderer.resize(newW, contentH);
+      const newH = Math.max(contentH, viewportH);
+      app.renderer.resize(newW, newH);
       // If content is wider than container, fix the pixel width; otherwise stay fluid
       app.canvas.style.width = newW > w ? `${newW}px` : "100%";
+      app.canvas.style.height = `${newH}px`;
+      app.canvas.style.backgroundColor = canvasBackground;
+      app.canvas.style.visibility = rungs.length === 0 ? "hidden" : "visible";
     }
 
     // Teal tint + branch highlight on the rung being live-previewed
@@ -137,7 +147,8 @@ export function PixiCanvas() {
 
     const app = new Application();
     app.init({
-      background: readCssHexVar(container, "--bg-canvas", 0x18181e),
+      background: getCanvasBackground(theme).hex,
+      backgroundAlpha: 0,
       antialias: true,
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
@@ -199,11 +210,11 @@ export function PixiCanvas() {
   }, [routine?.rungs, scanResult, selection, tagValues.size, showNodeComments, showRungComments]);
 
   // Theme changes arrive through CSS variables on the parent app root.
-  useEffect(() => {
-    syncPixiBackground(appRef.current, canvasRef.current);
+  useLayoutEffect(() => {
+    syncPixiBackground(appRef.current, theme);
     cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => renderRef.current());
-  });
+    renderRef.current();
+  }, [theme]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -1272,7 +1283,11 @@ export function PixiCanvas() {
   }
 
   return (
-    <div className="pixi-canvas-outer" ref={outerRef}>
+    <div
+      className={`pixi-canvas-outer pixi-canvas-outer--${theme}`}
+      ref={outerRef}
+      style={{ backgroundColor: canvasBackground }}
+    >
       <div className="pixi-routine-header">
         <span className="pixi-routine-name">{routine.name}</span>
         <span className="pixi-rung-count">
@@ -1297,7 +1312,8 @@ export function PixiCanvas() {
 
       <div
         ref={canvasRef}
-        className="pixi-canvas-wrap"
+        className={`pixi-canvas-wrap pixi-canvas-wrap--${theme}`}
+        style={{ backgroundColor: canvasBackground }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerLeave={handlePointerLeave}
@@ -2312,14 +2328,15 @@ function defaultDataTypeForInstruction(type: InstructionType | null): TagDataTyp
   }
 }
 
-function syncPixiBackground(app: Application | null, el: HTMLElement | null) {
+function syncPixiBackground(app: Application | null, theme: "dark" | "light") {
   if (!app) return;
-  const color = readCssHexVar(el, "--bg-canvas", 0x18181e);
+  const { hex, css } = getCanvasBackground(theme);
   const renderer = app.renderer as any;
   if (renderer.background) {
-    renderer.background.color = color;
-    renderer.background.alpha = 1;
+    renderer.background.color = hex;
+    renderer.background.alpha = 0;
   }
+  app.canvas.style.backgroundColor = css;
 }
 
 function readCssHexVar(el: HTMLElement | null, name: string, fallback: number): number {
@@ -2333,27 +2350,54 @@ function readCssHexVar(el: HTMLElement | null, name: string, fallback: number): 
   return fallback;
 }
 
-function readRendererColors(el: HTMLElement | null) {
+function getCanvasBackground(theme: "dark" | "light") {
+  return theme === "light"
+    ? { hex: 0xe8e8f0, css: "#e8e8f0" }
+    : { hex: 0x18181e, css: "#18181e" };
+}
+
+function getRendererColors(theme: "dark" | "light") {
+  const shared = {
+    wireOn: 0x22cc66,
+    railOn: 0x22cc66,
+    nodeOn: 0x22cc66,
+    nodeSelected: 0x4a8cff,
+    textBlue: 0x4a8cff,
+    textYellow: 0xf0b429,
+    textGreen: 0x22cc66,
+    branchRailOn: 0x22cc66,
+  };
+
+  if (theme === "light") {
+    return {
+      ...shared,
+      wireOff: 0x9090b0,
+      rail: 0x6868a8,
+      nodeBg: 0xf0f0fa,
+      nodeBorder: 0x9090b8,
+      nodeOnBg: 0xe8fff0,
+      textPrimary: 0x1a1a2a,
+      textDim: 0xa0a0b8,
+      gutterBg: 0xf8f8fc,
+      canvasBg: 0xe8e8f0,
+      separator: 0xc8c8d8,
+      branchRail: 0x9090b0,
+    };
+  }
+
   return {
-    wireOff: readCssHexVar(el, "--wire-inactive", 0x4a4a5a),
-    wireOn: readCssHexVar(el, "--wire-powered", 0x22cc66),
-    rail: readCssHexVar(el, "--wire-rail", 0x5858a0),
-    railOn: readCssHexVar(el, "--wire-powered", 0x22cc66),
-    nodeBg: readCssHexVar(el, "--node-bg", 0x1e1e2a),
-    nodeBorder: readCssHexVar(el, "--node-border", 0x3a3a56),
-    nodeOn: readCssHexVar(el, "--node-powered", 0x22cc66),
-    nodeOnBg: readCssHexVar(el, "--node-powered-bg", 0x0a1f12),
-    nodeSelected: readCssHexVar(el, "--node-selected", 0x4a8cff),
-    textPrimary: readCssHexVar(el, "--text-primary", 0xe8e8f0),
-    textBlue: readCssHexVar(el, "--accent-blue", 0x6a9eff),
-    textYellow: readCssHexVar(el, "--accent-yellow", 0xf0b429),
-    textGreen: readCssHexVar(el, "--accent-green", 0x22cc66),
-    textDim: readCssHexVar(el, "--text-dim", 0x707088),
-    gutterBg: readCssHexVar(el, "--bg-panel-alt", 0x11111a),
-    canvasBg: readCssHexVar(el, "--bg-canvas", 0x18181e),
-    separator: readCssHexVar(el, "--border", 0x26263a),
-    branchRail: readCssHexVar(el, "--wire-inactive", 0x4a4a5a),
-    branchRailOn: readCssHexVar(el, "--wire-powered", 0x22cc66),
+    ...shared,
+    wireOff: 0x4a4a5a,
+    rail: 0x6060a0,
+    nodeBg: 0x28283a,
+    nodeBorder: 0x3c3c58,
+    nodeOnBg: 0x0a1f12,
+    textPrimary: 0xe8e8f0,
+    textDim: 0x505060,
+    gutterBg: 0x1e1e26,
+    canvasBg: 0x18181e,
+    separator: 0x2e2e3a,
+    branchRail: 0x4a4a5a,
   };
 }
 

@@ -42,6 +42,10 @@
 .toolbar-tools { flex: 0 0 auto; }
 .toolbar-right { flex: 1; justify-content: flex-end; }
 
+.toolbar-nav {
+  margin-right: 4px;
+}
+
 .toolbar-btn {
   display: flex;
   align-items: center;

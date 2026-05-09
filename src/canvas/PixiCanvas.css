@@ -8,6 +8,16 @@
   position: relative;
 }
 
+.pixi-canvas-outer--light,
+.pixi-canvas-wrap--light {
+  background-color: #e8e8f0 !important;
+}
+
+.pixi-canvas-outer--dark,
+.pixi-canvas-wrap--dark {
+  background-color: #18181e !important;
+}
+
 .pixi-routine-header {
   display: flex;
   align-items: center;
@@ -82,10 +92,20 @@
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
+  background: var(--bg-canvas);
 }
 
 .pixi-canvas-wrap canvas {
   display: block;
+  background: var(--bg-canvas);
+}
+
+.pixi-canvas-wrap--light canvas {
+  background-color: #e8e8f0 !important;
+}
+
+.pixi-canvas-wrap--dark canvas {
+  background-color: #18181e !important;
 }
 
 .pixi-canvas-wrap--empty {

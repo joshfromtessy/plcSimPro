@@ -355,7 +355,8 @@ export class LadderRenderer {
     rungs: Rung[],
     powerStates: Map<string, RungPowerState>,
     canvasW: number,
-    tagValues: Map<string, boolean> = new Map()
+    tagValues: Map<string, boolean> = new Map(),
+    canvasH = 0
   ): { h: number; w: number } {
     this._tagValues = tagValues;
     const visualRungs = this._buildVisualRungs(rungs);
@@ -430,7 +431,8 @@ export class LadderRenderer {
       : canvasW - 22;
     const contentW = rightRailX + RAIL_W + 8;
 
-    this._drawBackground(totalH, rightRailX, separatorYs);
+    const contentH = Math.max(totalH + 8, canvasH);
+    this._drawBackground(totalH, contentH, rightRailX, separatorYs, canvasW);
 
     // Keep overlays on top of all rung containers (addChild re-orders to end).
     this._stage.addChild(this._dropDotsGfx);
@@ -441,7 +443,7 @@ export class LadderRenderer {
     this._stage.addChild(this._previewGfx);
     this._stage.addChild(this._rungDropGfx);
 
-    return { h: totalH + 8, w: contentW };
+    return { h: contentH, w: contentW };
   }
 
   private _buildVisualRungs(rungs: Rung[]): VisualRung[] {
@@ -491,14 +493,19 @@ export class LadderRenderer {
 
   private _drawBackground(
     totalH: number,
+    backgroundH: number,
     rightRailX: number,
-    separatorYs: number[]
+    separatorYs: number[],
+    canvasW: number
   ) {
     this._bgContainer.removeChildren().forEach(c => c.destroy({ children: true }));
-    if (totalH === 0) return;
 
     const g = new Graphics();
     this._bgContainer.addChild(g);
+    const backgroundW = Math.max(canvasW, rightRailX + RAIL_W + 8);
+
+    g.rect(0, 0, backgroundW, backgroundH).fill({ color: C.canvasBg });
+    if (totalH === 0) return;
 
     // Gutter
     g.rect(0, 0, this.RUNG_NUMBER_W, totalH).fill({ color: C.gutterBg });
