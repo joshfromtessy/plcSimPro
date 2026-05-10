@@ -21,20 +21,22 @@ import { isInstruction, isBranch } from "../model/ast";
 // ---------------------------------------------------------------------------
 
 export const RAIL_W        = 6;    // width of left/right power rail
-export const INST_W        = 80;   // instruction block width
-export const FUNCTION_INST_W = 104; // compare/move/math blocks need room for live values
+export const INST_W        = 92;   // instruction block width
+export const FUNCTION_INST_W = 124; // compare/move/math blocks need room for labels, values, and live values
 export const INST_H        = 52;   // instruction block height (contacts / coils / RES)
 export const COMPLEX_INST_H       = 88;  // taller block for TON/TOF/RTO/CTU/CTD
 export const COMPLEX_INST_WIRE_Y  = 20;  // wireYLocal for complex blocks (wire near top)
+export const FUNCTION_INST_H      = 102;  // compare/move/math blocks with data rows
 export const INST_GAP      = 16;   // horizontal gap between series elements
 export const BRANCH_PAD_H  = 34;   // horizontal padding inside branch rails
+export const BRANCH_INNER_PAD_H = 12; // clearance between branch rails and leg content
 export const BRANCH_PAD_V  = 10;   // vertical padding above/below each leg
 export const LEG_GAP_V     = 4;    // extra gap between legs inside a branch
-export const BRANCH_RAIL_W = 4;    // width of branch vertical bars
+export const BRANCH_RAIL_W = 2;    // match branch vertical bars to wire thickness
 export const RUNG_PAD_H    = 20;   // horizontal padding inside rung body (after rail)
 export const WIRE_Y_HALF   = INST_H / 2;  // wire runs at the centre of instruction height
 export const BAND_FOLD_H   = 28;   // vertical gap between bands for fold-wrap connectors
-export const COMMENT_H     = 16;   // height of per-instruction comment area (when visible)
+export const COMMENT_H     = 40;   // height of per-instruction comment area (three wrapped lines)
 export const RUNG_COMMENT_H = 20;  // height of rung comment bar (when visible)
 
 // ---------------------------------------------------------------------------
@@ -175,7 +177,7 @@ function measureInstruction(node: InstructionNode): SizeResult {
   }
   if (COMPARE_MOVE_TYPES.has(node.type)) {
     // Two data rows (sourceA/B or source/dest) — a bit shorter than timers
-    return { w: FUNCTION_INST_W, h: 72 + ch, wireYLocal: COMPLEX_INST_WIRE_Y + ch };
+    return { w: FUNCTION_INST_W, h: FUNCTION_INST_H + ch, wireYLocal: COMPLEX_INST_WIRE_Y + ch };
   }
   return { w: INST_W, h: INST_H + ch, wireYLocal: INST_H / 2 + ch };
 }
@@ -194,7 +196,7 @@ function measureBranch(node: BranchNode): SizeResult {
   }
   totalH += BRANCH_PAD_V - LEG_GAP_V; // bottom padding
 
-  const totalW = maxLegW + BRANCH_RAIL_W * 2 + BRANCH_PAD_H * 2;
+  const totalW = maxLegW + BRANCH_RAIL_W * 2 + BRANCH_PAD_H * 2 + BRANCH_INNER_PAD_H * 2;
 
   // Wire enters/exits at the midpoint of the first leg's wire
   const firstLegWireYLocal = BRANCH_PAD_V + legSizes[0].wireYLocal;
@@ -306,7 +308,7 @@ function placeBranch(
   const legSizes = node.legs.map(leg => measureSeries(leg.nodes));
   const maxLegW  = Math.max(...legSizes.map(s => s.w), INST_W);
   const innerW   = maxLegW;                          // content area width
-  const totalW   = innerW + BRANCH_RAIL_W * 2 + BRANCH_PAD_H * 2;
+  const totalW   = innerW + BRANCH_RAIL_W * 2 + BRANCH_PAD_H * 2 + BRANCH_INNER_PAD_H * 2;
 
   // Lay legs out top-to-bottom; first leg's wire aligns with incoming wireY
   // Compute y offsets for each leg
@@ -324,8 +326,8 @@ function placeBranch(
   const branchTop = wireY - BRANCH_PAD_V - firstLegWireLocal;
 
   const leftRailX  = x + BRANCH_PAD_H;
-  const rightRailX = x + BRANCH_PAD_H + BRANCH_RAIL_W + innerW;
-  const contentX   = leftRailX + BRANCH_RAIL_W;
+  const contentX   = leftRailX + BRANCH_RAIL_W + BRANCH_INNER_PAD_H;
+  const rightRailX = contentX + innerW + BRANCH_INNER_PAD_H;
 
   const layoutLegs: LayoutLeg[] = node.legs.map((leg, i) => {
     const legTop      = branchTop + BRANCH_PAD_V + legYOffsets[i];
@@ -399,16 +401,11 @@ export function layoutRung(rung: Rung, availableW: number, opts?: LayoutRungOpti
   const minHalf      = (INST_H + BRANCH_PAD_V * 2) / 2;
 
   // ── Determine if multi-band layout is required ─────────────────────────────
-  // Separate output coils from input nodes; outputs are always right-aligned.
-  const firstOutputIdx = outputSectionStartIndex(rung.nodes);
-  const inputNodesSrc  = firstOutputIdx >= 0 ? rung.nodes.slice(0, firstOutputIdx) : rung.nodes;
-  const outputNodesSrc = firstOutputIdx >= 0 ? rung.nodes.slice(firstOutputIdx)     : [];
-
   // Width available for a single band of input content
   const maxBandContentW = availableW - seriesStartX - RUNG_PAD_H - RAIL_W;
-  const inputSize       = measureSeries(inputNodesSrc);
+  const fullSize        = measureSeries(rung.nodes);
 
-  const needsMultiBand = inputNodesSrc.length > 1 && inputSize.w > maxBandContentW;
+  const needsMultiBand = rung.nodes.length > 1 && fullSize.w > maxBandContentW;
 
   // ── Single-band path (original behaviour) ─────────────────────────────────
   if (!needsMultiBand) {
@@ -442,7 +439,7 @@ export function layoutRung(rung: Rung, availableW: number, opts?: LayoutRungOpti
   let curBand: SeriesNode[] = [];
   let curBandW = 0;
 
-  for (const node of inputNodesSrc) {
+  for (const node of rung.nodes) {
     const nm  = isInstruction(node) ? measureInstruction(node) : measureBranch(node);
     const gap = curBand.length > 0 ? INST_GAP : 0;
 
@@ -465,10 +462,7 @@ export function layoutRung(rung: Rung, availableW: number, opts?: LayoutRungOpti
 
   for (let bi = 0; bi < bandInputGroups.length; bi++) {
     const isLastBand = bi === bandInputGroups.length - 1;
-    // Last band includes the output coils so they stay right-aligned.
-    const bandSrcNodes = isLastBand
-      ? [...bandInputGroups[bi], ...outputNodesSrc]
-      : bandInputGroups[bi];
+    const bandSrcNodes = bandInputGroups[bi];
 
     const bandSize   = measureSeries(bandSrcNodes);
     const wireYLocal = Math.max(bandSize.wireYLocal + BRANCH_PAD_V, minHalf);
@@ -478,10 +472,7 @@ export function layoutRung(rung: Rung, availableW: number, opts?: LayoutRungOpti
 
     if (bi === 0) firstWireY = wireY;
 
-    // Last band: right-align output coils; other bands: left-align all nodes.
-    const bandPlaced = isLastBand
-      ? placeTopLevelNodes(bandSrcNodes, seriesStartX, seriesEndX, wireY)
-      : placeNodes(bandSrcNodes, seriesStartX, wireY);
+    const bandPlaced = placeNodes(bandSrcNodes, seriesStartX, wireY);
 
     const firstNodeIdx = allNodes.length;
     allNodes.push(...bandPlaced);

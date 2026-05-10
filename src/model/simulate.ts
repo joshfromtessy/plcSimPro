@@ -189,6 +189,26 @@ function readTagBit(
   return false;
 }
 
+function hasReadableTagBit(
+  tags: Map<string, TagDefinition>,
+  tagName: string
+): boolean {
+  const ref = parseTagRef(tagName);
+  const tag = tags.get(ref.base);
+  if (!tag) return false;
+
+  if (tag.dataType === "BOOL" && ref.idx === undefined && ref.bit === undefined && ref.member === undefined) {
+    return true;
+  }
+  if ((tag.dataType === "TIMER" || tag.dataType === "COUNTER") && ref.member) {
+    return ["EN", "TT", "DN", "CU", "CD", "OV", "UN"].includes(ref.member);
+  }
+  if (tag.dataType === "DINT" || tag.dataType === "INT") {
+    return true;
+  }
+  return false;
+}
+
 function writeBool(
   tags: Map<string, TagDefinition>,
   name: string,
@@ -761,7 +781,7 @@ function evaluateContact(
     case "XIC":
       return conditionIn && readTagBit(tags, node.tagName);
     case "XIO":
-      return conditionIn && !readTagBit(tags, node.tagName);
+      return conditionIn && hasReadableTagBit(tags, node.tagName) && !readTagBit(tags, node.tagName);
     case "AFI":
       return false;
     case "OSR":

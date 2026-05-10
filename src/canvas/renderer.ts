@@ -39,7 +39,7 @@ import {
 // ---------------------------------------------------------------------------
 
 const C = {
-  wireOff:       0x4a4a5a,
+  wireOff:       0x64657a,
   wireOn:        0x22cc66,
   rail:          0x5858a0,
   railOn:        0x22cc66,
@@ -56,7 +56,7 @@ const C = {
   gutterBg:      0x11111a,
   canvasBg:      0x18181e,
   separator:     0x26263a,
-  branchRail:    0x4a4a5a,
+  branchRail:    0x64657a,
   branchRailOn:  0x22cc66,
 };
 
@@ -68,40 +68,40 @@ type RendererColors = Partial<typeof C>;
 
 const STYLE_TAG = new TextStyle({
   fontFamily: "Consolas, monospace",
-  fontSize: 10,
+  fontSize: 11,
   fill: C.textDim,
 });
 
 const STYLE_TAG_ON = new TextStyle({
   fontFamily: "Consolas, monospace",
-  fontSize: 10,
+  fontSize: 11,
   fill: C.textGreen,
 });
 
 const STYLE_MNEMONIC = new TextStyle({
   fontFamily: "Consolas, monospace",
-  fontSize: 9,
+  fontSize: 10,
   fill: C.textBlue,
   letterSpacing: 0.5,
 });
 
 const STYLE_MNEMONIC_OUT = new TextStyle({
   fontFamily: "Consolas, monospace",
-  fontSize: 9,
+  fontSize: 10,
   fill: C.textYellow,
   letterSpacing: 0.5,
 });
 
 const STYLE_MNEMONIC_ON = new TextStyle({
   fontFamily: "Consolas, monospace",
-  fontSize: 9,
+  fontSize: 10,
   fill: C.textGreen,
   letterSpacing: 0.5,
 });
 
 const STYLE_RUNG_NUM = new TextStyle({
   fontFamily: "Consolas, monospace",
-  fontSize: 10,
+  fontSize: 11,
   fill: C.textDim,
 });
 
@@ -322,9 +322,16 @@ export class LadderRenderer {
   }
 
   private _formatLiveValue(refName: string): string {
+    const trimmed = refName.trim();
+    if (/^0x[0-9a-fA-F]+$/i.test(trimmed) || /^[-+]?\d+(\.\d+)?$/.test(trimmed)) return "";
     const value = this._readNumericValue(refName);
     if (value === null) return "";
     return Number.isInteger(value) ? String(value) : String(+value.toFixed(3));
+  }
+
+  private _readBooleanValue(refName: string): boolean | null {
+    const value = this._readNumericValue(refName);
+    return value === null ? null : value !== 0;
   }
 
   setThemeColors(colors: RendererColors) {
@@ -680,7 +687,7 @@ export class LadderRenderer {
       if (caH > 0) {
         // Faint bar background
         g.rect(0, 0, layout.seriesEndX + RAIL_W + 20, caH)
-          .fill({ color: 0x14141c });
+          .fill({ color: C.gutterBg });
         g.moveTo(0, caH).lineTo(layout.seriesEndX + RAIL_W + 20, caH)
           .stroke({ color: C.separator, width: 1 });
 
@@ -724,10 +731,15 @@ export class LadderRenderer {
 
         // Left stub — first band starts at the rail edge (square cap handles overlap);
         // other bands start from seriesStartX (fold entry, no rail needed).
+        const entryPowered = isFirst
+          ? power !== null
+          : band.firstNodeIdx > 0
+            ? this._outPw(power, layout.nodes[band.firstNodeIdx - 1].nodeId)
+            : false;
         if (isFirst) {
-          this._seg(g, RAIL_W, bandNodes[0].x, wireY, power !== null);
+          this._seg(g, RAIL_W, bandNodes[0].x, wireY, entryPowered);
         } else {
-          this._seg(g, layout.seriesStartX, bandNodes[0].x, wireY, false);
+          this._seg(g, layout.seriesStartX, bandNodes[0].x, wireY, entryPowered);
         }
 
         // Between consecutive nodes in this band
@@ -742,7 +754,7 @@ export class LadderRenderer {
         const last   = bandNodes[bandNodes.length - 1];
         const lastPw = this._outPw(power, last.nodeId);
         const rightEnd = isLast ? this._rightRailLocalX : layout.seriesEndX + 4;
-        this._seg(g, last.x + last.w, rightEnd, wireY, isLast ? lastPw : false);
+        this._seg(g, last.x + last.w, rightEnd, wireY, lastPw);
       }
       return;
     }
@@ -829,11 +841,50 @@ export class LadderRenderer {
   }
 
   private _truncMiddleOperand(s: string): string {
-    return this._truncOp(s || "?", 7);
+    return this._truncOp(s || "?", 10);
   }
 
   private _truncLiveValue(s: string): string {
     return this._truncOp(s, 6);
+  }
+
+  private _truncTagLabel(s: string): string {
+    return this._truncOp(s || "?", 16);
+  }
+
+  private _wrapComment(s: string, maxChars = 13, maxLines = 3): string {
+    const words = s.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return "";
+
+    const lines: string[] = [];
+    let current = "";
+    for (const word of words) {
+      const chunks = word.length > maxChars
+        ? word.match(new RegExp(`.{1,${maxChars}}`, "g")) ?? [word]
+        : [word];
+      for (const chunk of chunks) {
+        const next = current ? `${current} ${chunk}` : chunk;
+        if (next.length <= maxChars) {
+          current = next;
+          continue;
+        }
+        if (current) lines.push(current);
+        current = chunk;
+        if (lines.length >= maxLines) break;
+      }
+      if (lines.length >= maxLines) break;
+    }
+    if (current && lines.length < maxLines) lines.push(current);
+
+    const original = s.trim();
+    const rendered = lines.join(" ");
+    if (rendered.length < original.length && lines.length > 0) {
+      const last = lines[lines.length - 1];
+      lines[lines.length - 1] = last.length >= maxChars
+        ? `${last.slice(0, maxChars - 1)}…`
+        : `${last}…`;
+    }
+    return lines.join("\n");
   }
 
   /**
@@ -892,7 +943,7 @@ export class LadderRenderer {
       const powered    = power?.nodePowered.get(node.nodeId) ?? false;
       const outPowered = visualOutPowered ?? this._outPw(power, node.nodeId);
       const selected   = !readOnly && this._selectedNodeId === node.nodeId;
-      this._drawInstruction(g, container, node, ast, powered, outPowered, selected, inputPowered);
+      this._drawInstruction(g, container, node, ast, powered, outPowered, selected, inputPowered, power !== null);
     } else {
       this._drawBranch(g, container, node, rung, power, inputPowered, readOnly);
     }
@@ -908,7 +959,8 @@ export class LadderRenderer {
     powered: boolean,
     outPowered: boolean,
     selected: boolean,
-    inputPowered: boolean = false
+    inputPowered: boolean = false,
+    liveValuesVisible: boolean = false
   ) {
     const { x, w } = layout;
     const cx    = x + w / 2;
@@ -924,19 +976,28 @@ export class LadderRenderer {
     const isComplex     = isTimerCtr || node.type === "RES" || node.type === "NOP";
 
     const wireColor = powered ? C.wireOn : C.wireOff;
-    const tagStyle  = powered ? STYLE_TAG_ON : STYLE_TAG;
-    const mnStyle   = powered ? STYLE_MNEMONIC_ON : isOutput ? STYLE_MNEMONIC_OUT : STYLE_MNEMONIC;
+    const contactTagValue = ["XIC", "XIO", "OSR", "OSF"].includes(node.type)
+      ? this._readBooleanValue(node.tagName)
+      : null;
+    const contactLit = liveValuesVisible && (node.type === "XIO" ? contactTagValue === false : contactTagValue === true);
+    const outputTagValue = isOutput ? this._readBooleanValue(node.tagName) : null;
+    const outputLatched = liveValuesVisible && outputTagValue === true;
+    const tagStateLit = contactLit || outputLatched;
+    const tagStyle  = powered || tagStateLit ? STYLE_TAG_ON : STYLE_TAG;
+    const mnStyle   = powered || tagStateLit ? STYLE_MNEMONIC_ON : isOutput ? STYLE_MNEMONIC_OUT : STYLE_MNEMONIC;
 
     // ── Instruction comment (tag description, shown when _showNodeComments is true) ──
     if (this._showNodeComments) {
       const tagDesc = this._resolveTag(node.tagName)?.description ?? "";
       const cmt = new Text({
-        text: tagDesc,
+        text: this._wrapComment(tagDesc),
         style: new TextStyle({
-          fontSize: 9,
-          fill: tagDesc ? C.textDim : 0x2a2a3a,
+          fontSize: 10,
+          fill: tagDesc ? C.textDim : 0x3a3b4d,
           fontFamily: "Consolas, monospace",
           fontStyle: "italic",
+          align: "center",
+          leading: 1,
         }),
       });
       cmt.anchor.set(0.5, 0.5);
@@ -995,18 +1056,18 @@ export class LadderRenderer {
         : "?";
 
       const labelSt = new TextStyle({
-        fontFamily: "Consolas, monospace", fontSize: 9, fill: C.textDim,
+        fontFamily: "Consolas, monospace", fontSize: 10, fill: C.textDim,
       });
       const tagValSt = new TextStyle({
-        fontFamily: "Consolas, monospace", fontSize: 10,
+        fontFamily: "Consolas, monospace", fontSize: 11,
         fill: powered ? C.textGreen : C.textPrimary,
       });
       const presetValSt = new TextStyle({
-        fontFamily: "Consolas, monospace", fontSize: 10,
+        fontFamily: "Consolas, monospace", fontSize: 11,
         fill: powered ? C.textGreen : C.textYellow,
       });
       const accumValSt = new TextStyle({
-        fontFamily: "Consolas, monospace", fontSize: 10,
+        fontFamily: "Consolas, monospace", fontSize: 11,
         fill: powered ? C.textGreen : C.textPrimary,
         fontWeight: "bold",
       });
@@ -1032,13 +1093,13 @@ export class LadderRenderer {
       // ── Compare / Move function block ─────────────────────────────────────
       // Wire enters near the top of the block (same as timer blocks).
       // 8px margins give visible stubs on each side matching Studio 5000 style.
-      const bx = x + 8, by = wireY - 14, bw = w - 16, bh = 58;
+      const bx = x + 8, by = wireY - 18, bw = w - 16, bh = 88;
       const isMovInst = node.type === "MOV" || node.type === "MVM";
       const isMathInst = ["ADD","SUB","MUL","DIV","MOD","NEG","ABS","SQR","CLR"].includes(node.type);
       const isUnaryMath = ["NEG","ABS","SQR","CLR"].includes(node.type);
       const isJsrInst = node.type === "JSR";
-      const headerY = isJsrInst ? by + 13 : wireY - 5;
-      const dividerY = isJsrInst ? by + 24 : wireY + 4;
+      const headerY = isJsrInst ? by + 16 : wireY - 7;
+      const dividerY = isJsrInst ? by + 31 : wireY + 6;
 
       if (selected) {
         g.roundRect(bx - 2, by - 2, bw + 4, bh + 4, 5)
@@ -1063,14 +1124,14 @@ export class LadderRenderer {
         .stroke({ color: powered ? C.nodeOn : C.nodeBorder, width: 1 });
 
       // Row styles
-      const labelSt = new TextStyle({ fontFamily: "Consolas, monospace", fontSize: 9, fill: C.textDim });
-      const valSt   = new TextStyle({ fontFamily: "Consolas, monospace", fontSize: 10, fill: powered ? C.textGreen : C.textPrimary });
-      const destSt  = new TextStyle({ fontFamily: "Consolas, monospace", fontSize: 10, fill: powered ? C.textGreen : C.textYellow });
-      const liveSt  = new TextStyle({ fontFamily: "Consolas, monospace", fontSize: 10, fill: powered ? C.textGreen : C.textDim, fontWeight: "bold" });
+      const labelSt = new TextStyle({ fontFamily: "Consolas, monospace", fontSize: 10, fill: C.textDim });
+      const valSt   = new TextStyle({ fontFamily: "Consolas, monospace", fontSize: 11, fill: powered ? C.textGreen : C.textPrimary });
+      const destSt  = new TextStyle({ fontFamily: "Consolas, monospace", fontSize: 11, fill: powered ? C.textGreen : C.textYellow });
+      const liveSt  = new TextStyle({ fontFamily: "Consolas, monospace", fontSize: 11, fill: powered ? C.textGreen : C.textDim, fontWeight: "bold" });
 
-      const drawOperandRow = (label: string, operand: string, rowY: number, style: TextStyle, valueX = bx + 27) => {
+      const drawOperandRow = (label: string, operand: string, rowY: number, style: TextStyle, valueX = bx + 38) => {
         const lbl = new Text({ text: label, style: labelSt });
-        lbl.anchor.set(0, 0.5); lbl.position.set(bx + 4, rowY);
+        lbl.anchor.set(0, 0.5); lbl.position.set(bx + 6, rowY);
         container.addChild(lbl);
 
         const name = new Text({ text: this._truncMiddleOperand(operand), style });
@@ -1078,14 +1139,14 @@ export class LadderRenderer {
         container.addChild(name);
 
         const liveValue = this._formatLiveValue(operand);
-        if (liveValue) {
+        if (liveValue && liveValue !== operand.trim()) {
           const live = new Text({ text: this._truncLiveValue(liveValue), style: liveSt });
           live.anchor.set(1, 0.5); live.position.set(bx + bw - 4, rowY);
           container.addChild(live);
         }
       };
 
-      const rowYs  = isJsrInst ? [dividerY + 18] : [wireY + 18, wireY + 36];
+      const rowYs  = isJsrInst ? [dividerY + 22] : [wireY + 24, wireY + 48];
       let labels: string[], values: string[];
 
         if (isJsrInst) {
@@ -1102,7 +1163,7 @@ export class LadderRenderer {
           if (node.type === "MVM") {
             labels = ["Src", "Msk", "Dst"];
             // squeeze 3 rows into the same space
-            const rowY3 = [wireY + 14, wireY + 28, wireY + 42];
+            const rowY3 = [wireY + 19, wireY + 39, wireY + 60];
             const vals3 = [
               move?.source ?? "",
               move?.mask ?? "",
@@ -1123,7 +1184,7 @@ export class LadderRenderer {
               : [math?.sourceA ?? "", math?.dest ?? ""];
           } else {
             labels = ["SrcA", "SrcB", "Dst"];
-            const rowY3 = [wireY + 14, wireY + 28, wireY + 42];
+            const rowY3 = [wireY + 19, wireY + 39, wireY + 60];
             const vals3 = [
               math?.sourceA ?? "",
               math?.sourceB ?? "",
@@ -1170,7 +1231,7 @@ export class LadderRenderer {
 
       // RES is tag-bound; NOP is intentionally parameterless.
       if (node.type !== "NOP") {
-        const tag = new Text({ text: node.tagName || "?", style: tagStyle });
+        const tag = new Text({ text: this._truncTagLabel(node.tagName), style: tagStyle });
         tag.anchor.set(0.5, 1);
         tag.position.set(cx, by - 2);
         container.addChild(tag);
@@ -1179,6 +1240,7 @@ export class LadderRenderer {
     } else if (isOutput) {
       // ── Coil: ─( )─ ──────────────────────────────────────────────────────
       const r = 10;
+      const coilColor = outputLatched ? C.wireOn : wireColor;
 
       // Selection highlight
       if (selected) {
@@ -1190,7 +1252,7 @@ export class LadderRenderer {
       this._seg(g, cx + r, x + w, wireY, powered);
 
       // Circle
-      g.circle(cx, wireY, r).stroke({ color: wireColor, width: 2 });
+      g.circle(cx, wireY, r).stroke({ color: coilColor, width: 2 });
 
       // Letter inside for OTL / OTU
       if (node.type === "OTL" || node.type === "OTU") {
@@ -1199,7 +1261,7 @@ export class LadderRenderer {
           style: new TextStyle({
             fontFamily: "Consolas, monospace", fontSize: 10,
             fontWeight: "bold",
-            fill: wireColor,
+            fill: coilColor,
           }),
         });
         ltr.anchor.set(0.5, 0.5);
@@ -1208,15 +1270,15 @@ export class LadderRenderer {
       }
 
       // Tag above
-      const tag = new Text({ text: node.tagName || "?", style: tagStyle });
+      const tag = new Text({ text: this._truncTagLabel(node.tagName), style: tagStyle });
       tag.anchor.set(0.5, 1);
-      tag.position.set(cx, wireY - r - 3);
+      tag.position.set(cx, wireY - r - 6);
       container.addChild(tag);
 
       // Mnemonic below
       const mn = new Text({ text: node.type, style: mnStyle });
       mn.anchor.set(0.5, 0);
-      mn.position.set(cx, wireY + r + 3);
+      mn.position.set(cx, wireY + r + 6);
       container.addChild(mn);
 
     } else if (node.type === "ONS") {
@@ -1247,7 +1309,7 @@ export class LadderRenderer {
        .stroke({ color: pulseColor, width: 1.5 });
 
       // Tag above
-      const tag = new Text({ text: node.tagName || "?", style: tagStyle });
+      const tag = new Text({ text: this._truncTagLabel(node.tagName), style: tagStyle });
       tag.anchor.set(0.5, 1);
       tag.position.set(cx, by - 2);
       container.addChild(tag);
@@ -1260,21 +1322,19 @@ export class LadderRenderer {
 
     } else {
       // ── Contact: ─┤ ├─  or  ─┤/├─ ───────────────────────────────────────
-      const barH = 16, barW = 3, halfGap = 8;
+      const barH = 16, barW = 2, halfGap = 8;
       const lBarX = cx - halfGap - barW;
       const rBarX = cx + halfGap;
 
       // Left side = power arriving at this contact's input terminal.
       // Right side = power exiting (conducting through).
+      const contactColor = contactLit ? C.wireOn : C.wireOff;
       const inColor  = inputPowered ? C.wireOn : C.wireOff;
-      const outColor = wireColor; // already powered ? C.wireOn : C.wireOff
 
-      // For XIO the slash keeps a tag-based colour so you can see contact
-      // state independently of power flow.
-      let slashColor = inColor;
-      if (node.type === "XIO") {
-        const tagVal = this._tagValues.get(node.tagName ?? "") ?? false;
-        slashColor = tagVal ? C.wireOff : C.wireOn;
+      // XIO is visually true when the referenced bit is false.
+      let slashColor = contactColor;
+      if (liveValuesVisible && node.type === "XIO") {
+        slashColor = contactTagValue === false ? C.wireOn : C.wireOff;
       }
 
       // Selection highlight
@@ -1285,10 +1345,10 @@ export class LadderRenderer {
 
       // Left stub + left bar  → input colour (power arriving)
       this._seg(g, x, lBarX, wireY, inputPowered);
-      g.rect(lBarX, wireY - barH / 2, barW, barH).fill({ color: inColor });
+      g.rect(lBarX, wireY - barH / 2, barW, barH).fill({ color: contactColor });
 
       // Right bar + right stub → output colour (power passing through)
-      g.rect(rBarX, wireY - barH / 2, barW, barH).fill({ color: outColor });
+      g.rect(rBarX, wireY - barH / 2, barW, barH).fill({ color: contactColor });
       this._seg(g, rBarX + barW, x + w, wireY, powered);
 
       // XIO slash — tag-based colour shows contact state regardless of power
@@ -1299,20 +1359,20 @@ export class LadderRenderer {
       }
       // OSR up-arrow
       if (node.type === "OSR") {
-        g.moveTo(cx, wireY + 5).lineTo(cx, wireY - 5).stroke({ color: inColor, width: 2 });
+        g.moveTo(cx, wireY + 5).lineTo(cx, wireY - 5).stroke({ color: contactColor, width: 2 });
         g.moveTo(cx - 4, wireY - 1).lineTo(cx, wireY - 6).lineTo(cx + 4, wireY - 1)
-          .stroke({ color: inColor, width: 2 });
+          .stroke({ color: contactColor, width: 2 });
       }
       // OSF down-arrow
       if (node.type === "OSF") {
-        g.moveTo(cx, wireY - 5).lineTo(cx, wireY + 5).stroke({ color: inColor, width: 2 });
+        g.moveTo(cx, wireY - 5).lineTo(cx, wireY + 5).stroke({ color: contactColor, width: 2 });
         g.moveTo(cx - 4, wireY + 1).lineTo(cx, wireY + 6).lineTo(cx + 4, wireY + 1)
-          .stroke({ color: inColor, width: 2 });
+          .stroke({ color: contactColor, width: 2 });
       }
 
       // Tag above
       if (node.type !== "AFI") {
-        const tag = new Text({ text: node.tagName || "?", style: tagStyle });
+        const tag = new Text({ text: this._truncTagLabel(node.tagName), style: tagStyle });
         tag.anchor.set(0.5, 1);
         tag.position.set(cx, wireY - barH / 2 - 3);
         container.addChild(tag);

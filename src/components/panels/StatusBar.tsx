@@ -27,8 +27,34 @@ export function StatusBar() {
       <div className="statusbar-right">
         {scanCount > 0 && (
           <span className="statusbar-scan">
-            Scan #{scanCount} | task {scanIntervalMs}ms | delta {lastScanDeltaMs}ms | exec {lastScanDurationMs}ms
-            {taskOverrunCount > 0 ? ` | overruns ${taskOverrunCount}` : ""}
+            <span className="statusbar-metric">
+              <span className="statusbar-label">Scan</span>
+              <span className="statusbar-value statusbar-value--scan">#{scanCount}</span>
+            </span>
+            <span className="statusbar-sep">|</span>
+            <span className="statusbar-metric">
+              <span className="statusbar-label">task</span>
+              <span className="statusbar-value">{scanIntervalMs}ms</span>
+            </span>
+            <span className="statusbar-sep">|</span>
+            <span className="statusbar-metric">
+              <span className="statusbar-label">delta</span>
+              <span className="statusbar-value">{lastScanDeltaMs.toFixed(1)}ms</span>
+            </span>
+            <span className="statusbar-sep">|</span>
+            <span className="statusbar-metric">
+              <span className="statusbar-label">exec</span>
+              <span className="statusbar-value">{lastScanDurationMs.toFixed(1)}ms</span>
+            </span>
+            {taskOverrunCount > 0 && (
+              <>
+                <span className="statusbar-sep">|</span>
+                <span className="statusbar-metric">
+                  <span className="statusbar-label">overruns</span>
+                  <span className="statusbar-value statusbar-value--overruns">{taskOverrunCount}</span>
+                </span>
+              </>
+            )}
           </span>
         )}
         <span className={`statusbar-mode statusbar-mode--${mode}`}>

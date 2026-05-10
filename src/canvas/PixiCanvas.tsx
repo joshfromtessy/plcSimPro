@@ -89,7 +89,7 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
   const routine = activeRoutineId
     ? project.programs.flatMap(p => p.routines).find(r => r.id === activeRoutineId)
     : null;
-  const canvasBackground = theme === "light" ? "#e8e8f0" : "#18181e";
+  const canvasBackground = theme === "light" ? "#f3f4f8" : "#18181e";
 
   // Build a tag-value map for XIO/XIC colouring (updated every render)
   const tagValues = new Map<string, boolean>(
@@ -2405,7 +2405,7 @@ function readCssHexVar(el: HTMLElement | null, name: string, fallback: number): 
 
 function getCanvasBackground(theme: "dark" | "light") {
   return theme === "light"
-    ? { hex: 0xe8e8f0, css: "#e8e8f0" }
+    ? { hex: 0xf3f4f8, css: "#f3f4f8" }
     : { hex: 0x18181e, css: "#18181e" };
 }
 
@@ -2424,29 +2424,30 @@ function getRendererColors(theme: "dark" | "light") {
   if (theme === "light") {
     return {
       ...shared,
-      wireOff: 0x9090b0,
-      rail: 0x6868a8,
-      nodeBg: 0xf0f0fa,
-      nodeBorder: 0x9090b8,
-      nodeOnBg: 0xe8fff0,
-      textPrimary: 0x1a1a2a,
-      textDim: 0xa0a0b8,
-      gutterBg: 0xf8f8fc,
-      canvasBg: 0xe8e8f0,
-      separator: 0xc8c8d8,
-      branchRail: 0x9090b0,
+      wireOff: 0x535b7a,
+      rail: 0x4f5590,
+      nodeBg: 0xffffff,
+      nodeBorder: 0x68708f,
+      nodeOnBg: 0xdbf8e8,
+      textPrimary: 0x171927,
+      textDim: 0x69708e,
+      textYellow: 0x9a5a00,
+      gutterBg: 0xe8eaf2,
+      canvasBg: 0xf3f4f8,
+      separator: 0xc3c7d6,
+      branchRail: 0x535b7a,
     };
   }
 
   return {
     ...shared,
-    wireOff: 0x4a4a5a,
+    wireOff: 0x64657a,
     rail: 0x6060a0,
     nodeBg: 0x28283a,
     nodeBorder: 0x3c3c58,
     nodeOnBg: 0x0a1f12,
     textPrimary: 0xe8e8f0,
-    textDim: 0x505060,
+    textDim: 0x6f7088,
     gutterBg: 0x1e1e26,
     canvasBg: 0x18181e,
     separator: 0x2e2e3a,

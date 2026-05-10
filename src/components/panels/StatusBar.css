@@ -32,7 +32,39 @@
 
 .statusbar-scan {
   color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.statusbar-metric {
+  display: inline-grid;
+  grid-template-columns: auto 58px;
+  align-items: baseline;
+  column-gap: 4px;
+}
+
+.statusbar-label {
+  color: var(--text-dim);
+}
+
+.statusbar-value {
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.statusbar-value--scan {
+  width: 52px;
+}
+
+.statusbar-value--overruns {
+  width: 28px;
+}
+
+.statusbar-sep {
+  color: var(--border-light);
 }
 
 .statusbar-mode {

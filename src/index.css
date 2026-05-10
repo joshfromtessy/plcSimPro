@@ -16,7 +16,7 @@
 
   --text-primary:   #e8e8f0;
   --text-secondary: #9090a8;
-  --text-dim:       #505060;
+  --text-dim:       #6f7088;
 
   /* Accent colours */
   --accent-blue:    #4a8cff;
@@ -27,7 +27,7 @@
   --accent-purple:  #9b71ea;
 
   /* Ladder-specific */
-  --wire-inactive:  #4a4a5a;
+  --wire-inactive:  #64657a;
   --wire-powered:   #22cc66;
   --wire-rail:      #6060a0;
   --node-bg:        #28283a;
@@ -46,22 +46,23 @@
 }
 
 [data-theme="light"] {
-  --bg-app:         #f0f0f5;
+  --bg-app:         #f4f5f9;
   --bg-panel:       #ffffff;
-  --bg-panel-alt:   #f8f8fc;
-  --bg-canvas:      #e8e8f0;
+  --bg-panel-alt:   #f7f8fc;
+  --bg-canvas:      #f3f4f8;
   --bg-rung:        #ffffff;
-  --bg-toolbar:     #e0e0ea;
-  --border:         #c8c8d8;
-  --border-light:   #d8d8e8;
-  --text-primary:   #1a1a2a;
-  --text-secondary: #50507a;
-  --text-dim:       #a0a0b8;
-  --wire-inactive:  #9090b0;
-  --wire-rail:      #6868a8;
-  --node-bg:        #f0f0fa;
-  --node-border:    #9090b8;
-  --node-powered-bg:#e8fff0;
+  --bg-toolbar:     #e8eaf2;
+  --border:         #c3c7d6;
+  --border-light:   #aeb5c9;
+  --text-primary:   #171927;
+  --text-secondary: #3d4566;
+  --text-dim:       #69708e;
+  --accent-yellow:  #9a5a00;
+  --wire-inactive:  #535b7a;
+  --wire-rail:      #4f5590;
+  --node-bg:        #ffffff;
+  --node-border:    #68708f;
+  --node-powered-bg:#dbf8e8;
 }
 
 *, *::before, *::after {

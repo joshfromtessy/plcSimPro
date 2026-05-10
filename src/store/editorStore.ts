@@ -62,7 +62,7 @@ export const useEditorStore = create<EditorState>()((set) => ({
     hoverValid: false,
   },
   expandedRoutineIds: new Set(),
-  showNodeComments: false,
+  showNodeComments: true,
   showRungComments: true,
 
   setSelection: (target) => set({ selection: target }),

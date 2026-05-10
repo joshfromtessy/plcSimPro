@@ -151,6 +151,187 @@
   padding-left: 18px;
 }
 
+.help-details {
+  padding: 0;
+  overflow: hidden;
+}
+
+.help-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.help-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.help-details summary::after {
+  content: "+";
+  color: var(--accent-blue);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 18px;
+}
+
+.help-details[open] summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.help-details[open] summary::after {
+  content: "-";
+}
+
+.help-details > :not(summary) {
+  margin-left: 20px;
+  margin-right: 20px;
+}
+
+.help-details > :last-child {
+  margin-bottom: 20px;
+}
+
+.help-details h3 {
+  margin: 18px 20px 8px;
+  color: var(--accent-blue);
+  font-size: 13px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.help-callouts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.help-callouts div {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(74, 140, 255, 0.08);
+}
+
+.help-callouts strong,
+.help-callouts span {
+  display: block;
+}
+
+.help-callouts strong {
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.help-callouts span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.about-grid div {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(74, 140, 255, 0.08);
+}
+
+.about-grid strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--accent-blue);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.about-grid p {
+  margin: 0;
+}
+
+.about-signature {
+  color: var(--text-primary) !important;
+  font-size: 16px !important;
+  font-weight: 700;
+}
+
+.help-table {
+  display: grid;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 0 20px 12px;
+}
+
+.help-table-row {
+  display: grid;
+  grid-template-columns: 58px 170px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .help-table-row {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.help-table-row:last-child {
+  border-bottom: 0;
+}
+
+.help-table-row code,
+.help-shortcuts kbd {
+  color: var(--accent-blue);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.help-table-row strong {
+  color: var(--text-primary);
+}
+
+.help-table-row span {
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.help-shortcuts {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.help-shortcuts span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+}
+
+.help-shortcuts kbd {
+  min-width: 26px;
+  padding: 2px 6px;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  background: var(--bg-app);
+  text-align: center;
+}
+
 .help-code {
   margin: 10px 0 16px;
   padding: 14px;
@@ -181,6 +362,18 @@
   width: 100%;
   height: 100%;
   border: 0;
+}
+
+@media (max-width: 720px) {
+  .help-callouts,
+  .about-grid,
+  .help-table-row {
+    grid-template-columns: 1fr;
+  }
+
+  .help-table-row {
+    gap: 4px;
+  }
 }
 
 .auth-card {
