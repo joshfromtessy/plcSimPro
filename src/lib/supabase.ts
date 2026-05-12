@@ -14,6 +14,8 @@ export const missingSupabaseEnv = {
   anonKey: !supabaseAnonKey,
 };
 
+export const turnstileSiteKey = pickEnv("VITE_TURNSTILE_SITE_KEY", "TURNSTILE_SITE_KEY") ?? "";
+
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl!, supabaseAnonKey!)
   : null;

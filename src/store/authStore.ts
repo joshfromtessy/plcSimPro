@@ -9,8 +9,8 @@ interface AuthState {
   error: string | null;
   initialized: boolean;
   initialize: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string, captchaToken?: string) => Promise<void>;
+  signUp: (email: string, password: string, captchaToken?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
@@ -49,25 +49,33 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 
-  signIn: async (email, password) => {
+  signIn: async (email, password, captchaToken) => {
     if (!supabase) {
       set({ error: "Supabase is not configured yet." });
       return;
     }
 
     set({ loading: true, error: null });
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: captchaToken ? { captchaToken } : undefined,
+    });
     set({ loading: false, error: error?.message ?? null });
   },
 
-  signUp: async (email, password) => {
+  signUp: async (email, password, captchaToken) => {
     if (!supabase) {
       set({ error: "Supabase is not configured yet." });
       return;
     }
 
     set({ loading: true, error: null });
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: captchaToken ? { captchaToken } : undefined,
+    });
     set({ loading: false, error: error?.message ?? null });
   },
 

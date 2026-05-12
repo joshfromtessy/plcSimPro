@@ -1,7 +1,7 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
-import { isSupabaseConfigured, missingSupabaseEnv } from "../lib/supabase";
+import { isSupabaseConfigured, missingSupabaseEnv, turnstileSiteKey } from "../lib/supabase";
 import { useAuthStore } from "../store/authStore";
 
 interface AuthPageProps {
@@ -14,10 +14,14 @@ export function AuthPage({ theme, mode }: AuthPageProps) {
   const { user, loading, error, signIn, signUp, signInWithGoogle, clearError } = useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
   const isSignup = mode === "signup";
+  const captchaRequired = Boolean(turnstileSiteKey);
+  const handleCaptchaExpire = useCallback(() => setCaptchaToken(""), []);
 
   useEffect(() => {
     clearError();
+    setCaptchaToken("");
   }, [clearError, mode]);
 
   useEffect(() => {
@@ -26,8 +30,9 @@ export function AuthPage({ theme, mode }: AuthPageProps) {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (isSignup) await signUp(email.trim(), password);
-    else await signIn(email.trim(), password);
+    if (captchaRequired && !captchaToken) return;
+    if (isSignup) await signUp(email.trim(), password, captchaToken || undefined);
+    else await signIn(email.trim(), password, captchaToken || undefined);
   }
 
   return (
@@ -86,8 +91,20 @@ export function AuthPage({ theme, mode }: AuthPageProps) {
                   required
                 />
               </label>
+              {captchaRequired ? (
+                <TurnstileWidget
+                  siteKey={turnstileSiteKey}
+                  theme={theme}
+                  onVerify={setCaptchaToken}
+                  onExpire={handleCaptchaExpire}
+                />
+              ) : (
+                <p className="auth-captcha-note">
+                  Turnstile is not configured. Add <code>VITE_TURNSTILE_SITE_KEY</code> to enable CAPTCHA.
+                </p>
+              )}
               {error && <p className="auth-error">{error}</p>}
-              <button className="auth-primary" type="submit" disabled={loading}>
+              <button className="auth-primary" type="submit" disabled={loading || (captchaRequired && !captchaToken)}>
                 {loading ? "Working..." : isSignup ? "Create account" : "Log in"}
               </button>
             </form>
@@ -102,4 +119,81 @@ export function AuthPage({ theme, mode }: AuthPageProps) {
       </section>
     </PageShell>
   );
+}
+
+interface TurnstileWindow extends Window {
+  turnstile?: {
+    render: (
+      container: HTMLElement,
+      options: {
+        sitekey: string;
+        theme?: "light" | "dark" | "auto";
+        action?: string;
+        callback: (token: string) => void;
+        "expired-callback": () => void;
+        "error-callback": () => void;
+      }
+    ) => string;
+    remove: (widgetId: string) => void;
+  };
+}
+
+function TurnstileWidget({
+  siteKey,
+  theme,
+  onVerify,
+  onExpire,
+}: {
+  siteKey: string;
+  theme: "dark" | "light";
+  onVerify: (token: string) => void;
+  onExpire: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const widgetIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const scriptId = "cf-turnstile-script";
+    let cancelled = false;
+
+    function renderWidget() {
+      const api = (window as TurnstileWindow).turnstile;
+      const container = containerRef.current;
+      if (cancelled || !api || !container || widgetIdRef.current) return;
+
+      widgetIdRef.current = api.render(container, {
+        sitekey: siteKey,
+        theme,
+        action: "auth",
+        callback: onVerify,
+        "expired-callback": onExpire,
+        "error-callback": onExpire,
+      });
+    }
+
+    const existing = document.getElementById(scriptId) as HTMLScriptElement | null;
+    if (existing) {
+      if ((window as TurnstileWindow).turnstile) renderWidget();
+      else existing.addEventListener("load", renderWidget, { once: true });
+    } else {
+      const script = document.createElement("script");
+      script.id = scriptId;
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.defer = true;
+      script.addEventListener("load", renderWidget, { once: true });
+      document.head.appendChild(script);
+    }
+
+    return () => {
+      cancelled = true;
+      const api = (window as TurnstileWindow).turnstile;
+      if (api && widgetIdRef.current) {
+        api.remove(widgetIdRef.current);
+        widgetIdRef.current = null;
+      }
+    };
+  }, [onExpire, onVerify, siteKey, theme]);
+
+  return <div className="auth-turnstile" ref={containerRef} />;
 }

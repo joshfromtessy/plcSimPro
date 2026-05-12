@@ -442,6 +442,24 @@
   border-top: 1px solid var(--border);
 }
 
+.auth-turnstile {
+  min-height: 65px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-captcha-note {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.auth-captcha-note code {
+  color: var(--accent-yellow);
+}
+
 .auth-form label {
   display: flex;
   flex-direction: column;
