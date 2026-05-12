@@ -11,7 +11,7 @@ interface AuthPageProps {
 
 export function AuthPage({ theme, mode }: AuthPageProps) {
   const navigate = useNavigate();
-  const { user, loading, error, signIn, signUp, clearError } = useAuthStore();
+  const { user, loading, error, signIn, signUp, signInWithGoogle, clearError } = useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const isSignup = mode === "signup";
@@ -58,33 +58,40 @@ export function AuthPage({ theme, mode }: AuthPageProps) {
             </ul>
           </div>
         ) : (
-          <form className="auth-form" onSubmit={handleSubmit}>
-            <label>
-              <span>Email</span>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                required
-              />
-            </label>
-            <label>
-              <span>Password</span>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete={isSignup ? "new-password" : "current-password"}
-                minLength={6}
-                required
-              />
-            </label>
-            {error && <p className="auth-error">{error}</p>}
-            <button className="auth-primary" type="submit" disabled={loading}>
-              {loading ? "Working..." : isSignup ? "Create account" : "Log in"}
+          <>
+            <button className="auth-google" type="button" onClick={signInWithGoogle} disabled={loading}>
+              <span className="auth-google-mark" aria-hidden="true">G</span>
+              Continue with Google
             </button>
-          </form>
+            <div className="auth-divider"><span>or</span></div>
+            <form className="auth-form" onSubmit={handleSubmit}>
+              <label>
+                <span>Email</span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  required
+                />
+              </label>
+              <label>
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete={isSignup ? "new-password" : "current-password"}
+                  minLength={6}
+                  required
+                />
+              </label>
+              {error && <p className="auth-error">{error}</p>}
+              <button className="auth-primary" type="submit" disabled={loading}>
+                {loading ? "Working..." : isSignup ? "Create account" : "Log in"}
+              </button>
+            </form>
+          </>
         )}
         <p className="auth-switch">
           {isSignup ? "Already have an account?" : "Need an account?"}{" "}
