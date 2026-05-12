@@ -83,11 +83,11 @@ function isInsideBranch(rung: Rung, nodeId: string): boolean {
 function isKnownType(type: InstructionType): boolean {
   const known: InstructionType[] = [
     "XIC","XIO","AFI","OSR","OSF","ONS",
-    "EQU","NEQ","LES","LEQ","GRT","GEQ",
+    "EQU","NEQ","LES","LEQ","GRT","GEQ","LIM",
     "OTE","OTL","OTU",
     "TON","TOF","RTO",
     "CTU","CTD","RES",
-    "MOV","MVM",
+    "MOV","MVM","COP","CPS","BSL","BSR",
     "ADD","SUB","MUL","DIV","MOD","NEG","ABS","SQR","CLR",
     "JSR","NOP",
   ];

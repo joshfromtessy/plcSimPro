@@ -48,11 +48,16 @@ const COMPARE_ITEMS: PaletteItem[] = [
   { type: "LEQ", label: "LEQ", description: "Less Than or Equal" },
   { type: "GRT", label: "GRT", description: "Greater Than" },
   { type: "GEQ", label: "GEQ", description: "Greater Than or Equal" },
+  { type: "LIM", label: "LIM", description: "Limit Test" },
 ];
 
 const MOVE_ITEMS: PaletteItem[] = [
   { type: "MOV", label: "MOV", description: "Move" },
   { type: "MVM", label: "MVM", description: "Masked Move" },
+  { type: "COP", label: "COP", description: "Copy File" },
+  { type: "CPS", label: "CPS", description: "Synchronous Copy File" },
+  { type: "BSL", label: "BSL", description: "Bit Shift Left" },
+  { type: "BSR", label: "BSR", description: "Bit Shift Right" },
 ];
 
 const MATH_ITEMS: PaletteItem[] = [
@@ -218,8 +223,13 @@ const ICONS: Record<string, React.ReactNode> = {
   LEQ: <BlockIcon label="LEQ" />,
   GRT: <BlockIcon label="GRT" />,
   GEQ: <BlockIcon label="GEQ" />,
+  LIM: <BlockIcon label="LIM" />,
   MOV: <BlockIcon label="MOV" />,
   MVM: <BlockIcon label="MVM" />,
+  COP: <BlockIcon label="COP" />,
+  CPS: <BlockIcon label="CPS" />,
+  BSL: <BlockIcon label="BSL" />,
+  BSR: <BlockIcon label="BSR" />,
   ADD: <BlockIcon label="ADD" />,
   SUB: <BlockIcon label="SUB" />,
   MUL: <BlockIcon label="MUL" />,

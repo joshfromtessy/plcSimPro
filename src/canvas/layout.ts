@@ -162,7 +162,7 @@ interface SizeResult {
 
 const TIMER_COUNTER_TYPES   = new Set(["TON", "TOF", "RTO", "CTU", "CTD"]);
 const COMPARE_MOVE_TYPES    = new Set([
-  "EQU", "NEQ", "LES", "LEQ", "GRT", "GEQ", "MOV", "MVM",
+  "EQU", "NEQ", "LES", "LEQ", "GRT", "GEQ", "LIM", "MOV", "MVM", "COP", "CPS", "BSL", "BSR",
   "ADD", "SUB", "MUL", "DIV", "MOD", "NEG", "ABS", "SQR", "CLR",
   "JSR",
 ]);

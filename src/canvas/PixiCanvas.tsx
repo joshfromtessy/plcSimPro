@@ -9,7 +9,7 @@ import { useSimulationStore } from "../store/simulationStore";
 import { useEditorStore } from "../store/editorStore";
 import { clearDraggedTagPayload, getDraggedTagPayload, type DraggedTagPayload } from "../store/dragPayload";
 import { LadderRenderer } from "./renderer";
-import type { InstructionType, InsertPosition, Rung, TagDataType, TimerParams, CounterParams, CompareParams, MoveParams, MathParams, JsrParams } from "../model/types";
+import type { InstructionType, InsertPosition, Rung, TagDataType, TimerParams, CounterParams, CompareParams, MoveParams, CopyParams, BitShiftParams, MathParams, JsrParams } from "../model/types";
 import {
   findContainingBranch, isBranch,
   applyInsert, applyDelete,
@@ -1244,6 +1244,12 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
 
     const relToWire = canvasY - bounds.y - layout.wireY;
 
+    if (type === "LIM") {
+      const field = relToWire < 21 ? "sourceA" : relToWire < 35 ? "sourceB" : "sourceC";
+      setInstructionParams(routineId, rungId, node.id, { [field]: tag.name });
+      return;
+    }
+
     if (["EQU","NEQ","LES","LEQ","GRT","GEQ"].includes(type)) {
       setInstructionParams(routineId, rungId, node.id, { [relToWire < 27 ? "sourceA" : "sourceB"]: tag.name });
       return;
@@ -1256,6 +1262,18 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
 
     if (type === "MVM") {
       const field = relToWire < 21 ? "source" : relToWire < 35 ? "mask" : "dest";
+      setInstructionParams(routineId, rungId, node.id, { [field]: tag.name });
+      return;
+    }
+
+    if (type === "COP" || type === "CPS") {
+      const field = relToWire < 21 ? "source" : relToWire < 35 ? "dest" : "length";
+      setInstructionParams(routineId, rungId, node.id, { [field]: tag.name });
+      return;
+    }
+
+    if (type === "BSL" || type === "BSR") {
+      const field = relToWire < 21 ? "array" : relToWire < 35 ? "source" : "length";
       setInstructionParams(routineId, rungId, node.id, { [field]: tag.name });
       return;
     }
@@ -1307,6 +1325,10 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
     if (!layout || !bounds) return simple("No drop", false);
     const relToWire = canvasY - bounds.y - layout.wireY;
 
+    if (type === "LIM") {
+      const rowIndex = relToWire < 21 ? 0 : relToWire < 35 ? 1 : 2;
+      return { rowIndex, rowCount: 3, label: ["Low", "Test", "High"][rowIndex], valid: isNumeric };
+    }
     if (["EQU","NEQ","LES","LEQ","GRT","GEQ"].includes(type)) {
       const rowIndex = relToWire < 27 ? 0 : 1;
       return { rowIndex, rowCount: 2, label: rowIndex === 0 ? "SrcA" : "SrcB", valid: isNumeric };
@@ -1318,6 +1340,17 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
     if (type === "MVM") {
       const rowIndex = relToWire < 21 ? 0 : relToWire < 35 ? 1 : 2;
       return { rowIndex, rowCount: 3, label: ["Src", "Msk", "Dst"][rowIndex], valid: isNumeric };
+    }
+    if (type === "COP" || type === "CPS") {
+      const rowIndex = relToWire < 21 ? 0 : relToWire < 35 ? 1 : 2;
+      return { rowIndex, rowCount: 3, label: ["Src", "Dst", "Len"][rowIndex], valid: isNumeric };
+    }
+    if (type === "BSL" || type === "BSR") {
+      const rowIndex = relToWire < 21 ? 0 : relToWire < 35 ? 1 : 2;
+      const valid = rowIndex === 0
+        ? tag.dataType === "DINT" || tag.dataType === "INT"
+        : isNumeric;
+      return { rowIndex, rowCount: 3, label: ["Array", "Src", "Len"][rowIndex], valid };
     }
     if (["ADD","SUB","MUL","DIV","MOD"].includes(type)) {
       const rowIndex = relToWire < 21 ? 0 : relToWire < 35 ? 1 : 2;
@@ -1858,7 +1891,7 @@ function ComplexParamEditor({ editor, routineId, onClose }: {
 const MATH_TYPES = new Set(["ADD","SUB","MUL","DIV","MOD","NEG","ABS","SQR","CLR"]);
 const BINARY_MATH_TYPES = new Set(["ADD","SUB","MUL","DIV","MOD"]);
 const COMPARE_MOVE_TYPES = new Set([
-  "EQU","NEQ","LES","LEQ","GRT","GEQ","MOV","MVM",
+  "EQU","NEQ","LES","LEQ","GRT","GEQ","LIM","MOV","MVM","COP","CPS","BSL","BSR",
   ...MATH_TYPES,
   "JSR",
 ]);
@@ -1877,20 +1910,25 @@ function CompareMovEditor({ editor, routineId, onClose }: {
   if (!node || node.kind !== "instruction") return null;
 
   const isJsrInst = node.type === "JSR";
+  const isLimInst = node.type === "LIM";
   const isMovInst = node.type === "MOV" || node.type === "MVM";
   const isMVM     = node.type === "MVM";
+  const isCopyInst = node.type === "COP" || node.type === "CPS";
+  const isShiftInst = node.type === "BSL" || node.type === "BSR";
   const isMathInst = MATH_TYPES.has(node.type);
   const isBinaryMath = BINARY_MATH_TYPES.has(node.type);
   const isClr = node.type === "CLR";
   const cp = node.params as CompareParams;
   const mp = node.params as MoveParams;
+  const copy = node.params as CopyParams;
+  const shift = node.params as BitShiftParams;
   const math = node.params as MathParams;
   const jsr = node.params as JsrParams;
 
-  const [fieldA, setFieldA] = useState(isMathInst ? (math.sourceA ?? "") : isMovInst ? (mp.source ?? "") : (cp.sourceA ?? ""));
-  const [fieldB, setFieldB] = useState(isMathInst ? (math.sourceB ?? "") : isMovInst ? (mp.dest   ?? "") : (cp.sourceB ?? ""));
+  const [fieldA, setFieldA] = useState(isMathInst ? (math.sourceA ?? "") : isShiftInst ? (shift.array ?? "") : isCopyInst ? (copy.source ?? "") : isMovInst ? (mp.source ?? "") : (cp.sourceA ?? ""));
+  const [fieldB, setFieldB] = useState(isMathInst ? (math.sourceB ?? "") : isShiftInst ? (shift.source ?? "") : isCopyInst ? (copy.dest ?? "") : isMovInst ? (mp.dest   ?? "") : (cp.sourceB ?? ""));
   const [fieldDest, setFieldDest] = useState(isMathInst ? (math.dest ?? "") : "");
-  const [fieldMask, setFieldMask] = useState(isMVM ? ((node.params as MoveParams).mask ?? "0xFFFFFFFF") : "");
+  const [fieldMask, setFieldMask] = useState(isMVM ? ((node.params as MoveParams).mask ?? "0xFFFFFFFF") : isShiftInst ? (shift.length ?? "32") : isCopyInst ? (copy.length ?? "1") : isLimInst ? (cp.sourceC ?? "") : "");
   const routines = project.programs.flatMap(program => program.routines);
   const [routineName, setRoutineName] = useState(jsr.routineName || routines.find(r => r.id !== routineId)?.name || "");
   type OperandField = "sourceA" | "sourceB" | "dest" | "mask";
@@ -1982,6 +2020,30 @@ function CompareMovEditor({ editor, routineId, onClose }: {
       const patch: Partial<MoveParams> = { source: a, dest: b };
       if (isMVM) patch.mask = mask || "0xFFFFFFFF";
       setInstructionParams(routineId, editor.rungId, editor.nodeId, patch);
+    } else if (isCopyInst) {
+      const destIsLiteral = !isNaN(Number(b)) || /^0x/i.test(b);
+      if (!destIsLiteral && b && !isExistingStructuredRef(b) && !project.tags.find(t => t.name === b)) {
+        addTag(b, "DINT");
+      }
+      const patch: Partial<CopyParams> = {
+        source: a,
+        dest: b,
+        length: mask || "1",
+      };
+      setInstructionParams(routineId, editor.rungId, editor.nodeId, patch);
+    } else if (isShiftInst) {
+      if (a && !project.tags.find(t => t.name === a)) {
+        addTag(a, "DINT");
+      }
+      const patch: Partial<BitShiftParams> = {
+        array: a,
+        source: b,
+        length: mask || "32",
+      };
+      setInstructionParams(routineId, editor.rungId, editor.nodeId, patch);
+    } else if (isLimInst) {
+      setInstructionParams(routineId, editor.rungId, editor.nodeId,
+        { sourceA: a, sourceB: b, sourceC: mask });
     } else {
       setInstructionParams(routineId, editor.rungId, editor.nodeId,
         { sourceA: a, sourceB: b });
@@ -2030,10 +2092,10 @@ function CompareMovEditor({ editor, routineId, onClose }: {
     }
   }
 
-  const labelA = isClr ? "Source" : isMovInst ? "Source"      : "Source A";
-  const labelB = isMovInst ? "Destination" : "Source B";
+  const labelA = isClr ? "Source" : isShiftInst ? "Array" : isLimInst ? "Low Limit" : (isMovInst || isCopyInst) ? "Source" : "Source A";
+  const labelB = isShiftInst ? "Source Bit" : isLimInst ? "Test" : (isMovInst || isCopyInst) ? "Destination" : "Source B";
   const hintA  = "tag or literal";
-  const hintB  = isMovInst ? "tag name" : "tag or literal";
+  const hintB  = (isMovInst || isCopyInst) ? "tag name" : "tag or literal";
 
   const sugA = activeField === "sourceA" ? suggestionsFor(fieldA) : [];
   const sugB = activeField === "sourceB" ? suggestionsFor(fieldB) : [];
@@ -2122,7 +2184,7 @@ function CompareMovEditor({ editor, routineId, onClose }: {
       )}
 
       {/* Field B */}
-      {(!isMathInst || isBinaryMath) && (
+      {(!isMathInst || isBinaryMath || isShiftInst || isCopyInst || isLimInst) && (
         <>
           <label className="tag-quick-edit-type" style={{ marginTop: 6 }}><span>{labelB}</span></label>
           <input
@@ -2188,6 +2250,35 @@ function CompareMovEditor({ editor, routineId, onClose }: {
             className="tag-quick-edit-input"
             value={fieldMask}
             placeholder="0xFFFFFFFF or tag"
+            onFocus={() => handleFocus("mask")}
+            onChange={e => { setFieldMask(e.target.value); setActiveSuggestionIndex(0); }}
+            onKeyDown={e => handleOperandKey(e, "mask", sugMask, setFieldMask)}
+          />
+          {sugMask.length > 0 && (
+            <div className="tag-quick-edit-list">
+              {sugMask.map((t, i) => (
+                <button
+                  key={t.id}
+                  className={i === activeSuggestionIndex ? "active" : ""}
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); setFieldMask(t.name); setActiveField(null); }}
+                >
+                  <span>{t.name}</span><em>{t.dataType}</em>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Third field for LIM / copy / shift instructions */}
+      {(isShiftInst || isCopyInst || isLimInst) && (
+        <>
+          <label className="tag-quick-edit-type" style={{ marginTop: 6 }}><span>{isLimInst ? "High Limit" : "Length"}</span></label>
+          <input
+            className="tag-quick-edit-input"
+            value={fieldMask}
+            placeholder={isLimInst ? "tag or literal" : isCopyInst ? "element count" : "bit count"}
             onFocus={() => handleFocus("mask")}
             onChange={e => { setFieldMask(e.target.value); setActiveSuggestionIndex(0); }}
             onKeyDown={e => handleOperandKey(e, "mask", sugMask, setFieldMask)}

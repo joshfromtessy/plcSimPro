@@ -24,6 +24,8 @@ import type {
   CounterParams,
   CompareParams,
   MoveParams,
+  CopyParams,
+  BitShiftParams,
   MathParams,
   InstructionParams,
   JsrParams,
@@ -189,6 +191,8 @@ function readTagBit(
   return false;
 }
 
+const bitShiftPrevCondition = new Map<string, boolean>();
+
 function hasReadableTagBit(
   tags: Map<string, TagDefinition>,
   tagName: string
@@ -333,6 +337,90 @@ function writeTagNumber(tagName: string, value: number, tags: Map<string, TagDef
       cd.accum = next;
       cd.dn = cd.accum >= cd.preset;
     }
+  }
+}
+
+function readShiftBit(tags: Map<string, TagDefinition>, arrayRef: string, bitIndex: number): boolean {
+  const ref = parseTagRef(arrayRef);
+  const tag = tags.get(ref.base);
+  if (!tag || (tag.dataType !== "DINT" && tag.dataType !== "INT")) return false;
+  const wordSize = tag.dataType === "INT" ? 16 : 32;
+  const wordIndex = Math.floor(bitIndex / wordSize);
+  const bit = bitIndex % wordSize;
+  const baseIndex = ref.idx ?? 0;
+  const value = getWordValue(tag, baseIndex + wordIndex);
+  return ((value >> bit) & 1) === 1;
+}
+
+function writeShiftBit(tags: Map<string, TagDefinition>, arrayRef: string, bitIndex: number, value: boolean): void {
+  const ref = parseTagRef(arrayRef);
+  const tag = tags.get(ref.base);
+  if (!tag || (tag.dataType !== "DINT" && tag.dataType !== "INT")) return;
+  const wordSize = tag.dataType === "INT" ? 16 : 32;
+  const wordIndex = Math.floor(bitIndex / wordSize);
+  const bit = bitIndex % wordSize;
+  const baseIndex = ref.idx ?? 0;
+  const idx = baseIndex + wordIndex;
+  const word = getWordValue(tag, idx);
+  const next = value ? (word | (1 << bit)) : (word & ~(1 << bit));
+  setWordValue(tag, idx, next | 0);
+}
+
+function executeBitShift(
+  node: InstructionNode,
+  params: BitShiftParams,
+  conditionIn: boolean,
+  tags: Map<string, TagDefinition>
+): void {
+  const wasTrue = bitShiftPrevCondition.get(node.id) ?? false;
+  bitShiftPrevCondition.set(node.id, conditionIn);
+  if (!conditionIn || wasTrue || !params?.array) return;
+
+  const length = Math.max(0, Math.min(1024, resolveOperand(params.length || "0", tags) | 0));
+  if (length <= 0) return;
+  const sourceBit = readTagNumber(params.source ?? "", tags) !== 0;
+
+  if (node.type === "BSL") {
+    for (let bit = length - 1; bit >= 1; bit--) {
+      writeShiftBit(tags, params.array, bit, readShiftBit(tags, params.array, bit - 1));
+    }
+    writeShiftBit(tags, params.array, 0, sourceBit);
+  } else {
+    for (let bit = 0; bit < length - 1; bit++) {
+      writeShiftBit(tags, params.array, bit, readShiftBit(tags, params.array, bit + 1));
+    }
+    writeShiftBit(tags, params.array, length - 1, sourceBit);
+  }
+}
+
+function readCopyValue(sourceRef: string, offset: number, tags: Map<string, TagDefinition>): number {
+  const ref = parseTagRef(sourceRef);
+  const tag = tags.get(ref.base);
+  if (!tag || ref.bit !== undefined || ref.member !== undefined || !Array.isArray(tag.value)) {
+    return resolveOperand(sourceRef, tags);
+  }
+
+  return Number((tag.value as number[])[(ref.idx ?? 0) + offset] ?? 0);
+}
+
+function writeCopyValue(destRef: string, offset: number, value: number, tags: Map<string, TagDefinition>): void {
+  const ref = parseTagRef(destRef);
+  const tag = tags.get(ref.base);
+  if (!tag || ref.bit !== undefined || ref.member !== undefined || !Array.isArray(tag.value)) {
+    if (offset === 0) writeTagNumber(destRef, value, tags);
+    return;
+  }
+
+  const targetIndex = (ref.idx ?? 0) + offset;
+  if (targetIndex < 0 || targetIndex >= (tag.value as number[]).length) return;
+  setWordValue(tag, targetIndex, value);
+}
+
+function executeCopyFile(params: CopyParams, tags: Map<string, TagDefinition>): void {
+  if (!params?.dest) return;
+  const length = Math.max(0, Math.min(1024, resolveOperand(params.length || "1", tags) | 0));
+  for (let i = 0; i < length; i++) {
+    writeCopyValue(params.dest, i, readCopyValue(params.source ?? "", i, tags), tags);
   }
 }
 
@@ -791,11 +879,12 @@ function evaluateContact(
       return conditionIn && readTagBit(tags, node.tagName);
 
     // ── Compare instructions ──────────────────────────────────────────────
-    case "EQU": case "NEQ": case "LES": case "LEQ": case "GRT": case "GEQ": {
+    case "EQU": case "NEQ": case "LES": case "LEQ": case "GRT": case "GEQ": case "LIM": {
       if (!conditionIn) return false;
       const p = node.params as CompareParams;
       const a = resolveOperand(p?.sourceA ?? "", tags);
       const b = resolveOperand(p?.sourceB ?? "", tags);
+      const c = resolveOperand(p?.sourceC ?? "", tags);
       switch (node.type) {
         case "EQU": return a === b;
         case "NEQ": return a !== b;
@@ -803,6 +892,7 @@ function evaluateContact(
         case "LEQ": return a <=  b;
         case "GRT": return a >   b;
         case "GEQ": return a >=  b;
+        case "LIM": return b >= a && b <= c;
       }
       return false;
     }
@@ -1011,6 +1101,19 @@ function executeOutput(
       break;
     }
 
+    case "COP":
+    case "CPS": {
+      if (!conditionIn) break;
+      executeCopyFile(node.params as CopyParams, tags);
+      break;
+    }
+
+    case "BSL":
+    case "BSR": {
+      executeBitShift(node, node.params as BitShiftParams, conditionIn, tags);
+      break;
+    }
+
     case "ADD":
     case "SUB":
     case "MUL":
@@ -1097,7 +1200,8 @@ function evaluateSeries(
         node.type === "OSR" || node.type === "OSF" ||
         node.type === "EQU" || node.type === "NEQ" ||
         node.type === "LES" || node.type === "LEQ" ||
-        node.type === "GRT" || node.type === "GEQ"
+        node.type === "GRT" || node.type === "GEQ" ||
+        node.type === "LIM"
       ) {
         // Contacts evaluate against contactCondition, not the (possibly blocked)
         // wire condition.  This lets them "see through" an upstream terminal block.

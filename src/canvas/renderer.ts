@@ -11,7 +11,7 @@ import {
   Rectangle,
 } from "pixi.js";
 
-import type { Rung, SeriesNode, InstructionNode, InsertPosition, RungPowerState, InstructionType, TagDefinition, TimerParams, CounterParams, CompareParams, MoveParams, MathParams, JsrParams } from "../model/types";
+import type { Rung, SeriesNode, InstructionNode, InsertPosition, RungPowerState, InstructionType, TagDefinition, TimerParams, CounterParams, CompareParams, MoveParams, CopyParams, BitShiftParams, MathParams, JsrParams } from "../model/types";
 import { isCoilOutput, isOutput } from "../model/types";
 import { isInstruction, isBranch } from "../model/ast";
 import {
@@ -969,7 +969,7 @@ export class LadderRenderer {
     const isOutput      = ["OTE","OTL","OTU"].includes(node.type);
     const isTimerCtr    = ["TON","TOF","RTO","CTU","CTD"].includes(node.type);
     const isCompareMov  = [
-      "EQU","NEQ","LES","LEQ","GRT","GEQ","MOV","MVM",
+      "EQU","NEQ","LES","LEQ","GRT","GEQ","LIM","MOV","MVM","COP","CPS","BSL","BSR",
       "ADD","SUB","MUL","DIV","MOD","NEG","ABS","SQR","CLR",
       "JSR",
     ].includes(node.type);
@@ -1095,6 +1095,8 @@ export class LadderRenderer {
       // 8px margins give visible stubs on each side matching Studio 5000 style.
       const bx = x + 8, by = wireY - 18, bw = w - 16, bh = 88;
       const isMovInst = node.type === "MOV" || node.type === "MVM";
+      const isCopyInst = node.type === "COP" || node.type === "CPS";
+      const isShiftInst = node.type === "BSL" || node.type === "BSR";
       const isMathInst = ["ADD","SUB","MUL","DIV","MOD","NEG","ABS","SQR","CLR"].includes(node.type);
       const isUnaryMath = ["NEG","ABS","SQR","CLR"].includes(node.type);
       const isJsrInst = node.type === "JSR";
@@ -1175,6 +1177,32 @@ export class LadderRenderer {
           // skip generic 2-row render below
           labels = []; values = [];
         }
+        } else if (isCopyInst) {
+          const copy = node.params as CopyParams;
+          labels = ["Src", "Dst", "Len"];
+          const rowY3 = [wireY + 19, wireY + 39, wireY + 60];
+          const vals3 = [
+            copy?.source ?? "",
+            copy?.dest ?? "",
+            copy?.length ?? "1",
+          ];
+          for (let i = 0; i < 3; i++) {
+            drawOperandRow(labels[i], vals3[i], rowY3[i], i === 1 ? destSt : valSt);
+          }
+          labels = []; values = [];
+        } else if (isShiftInst) {
+          const shift = node.params as BitShiftParams;
+          labels = ["Array", "Src", "Len"];
+          const rowY3 = [wireY + 19, wireY + 39, wireY + 60];
+          const vals3 = [
+            shift?.array ?? "",
+            shift?.source ?? "",
+            shift?.length ?? "32",
+          ];
+          for (let i = 0; i < 3; i++) {
+            drawOperandRow(labels[i], vals3[i], rowY3[i], i === 0 ? destSt : valSt, bx + 44);
+          }
+          labels = []; values = [];
         } else if (isMathInst) {
           const math = node.params as MathParams;
           if (isUnaryMath) {
@@ -1195,6 +1223,19 @@ export class LadderRenderer {
             }
             labels = []; values = [];
           }
+        } else if (node.type === "LIM") {
+          const compare = node.params as CompareParams;
+          labels = ["Low", "Test", "High"];
+          const rowY3 = [wireY + 19, wireY + 39, wireY + 60];
+          const vals3 = [
+            compare?.sourceA ?? "",
+            compare?.sourceB ?? "",
+            compare?.sourceC ?? "",
+          ];
+          for (let i = 0; i < 3; i++) {
+            drawOperandRow(labels[i], vals3[i], rowY3[i], valSt, bx + 44);
+          }
+          labels = []; values = [];
         } else {
           const compare = node.params as CompareParams;
           labels = ["SrcA", "SrcB"];

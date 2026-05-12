@@ -85,6 +85,7 @@ export type InstructionType =
   | "LEQ"   // Less Than or Equal — Source A <= Source B
   | "GRT"   // Greater Than       — Source A >  Source B
   | "GEQ"   // Greater Than Equal — Source A >= Source B
+  | "LIM"   // Limit Test         — Low <= Test <= High
   // Output instructions (coils) — must be at the END of a rung path
   | "OTE"   // Output Energize    — sets tag = rung condition
   | "OTL"   // Output Latch       — sets tag TRUE when rung TRUE
@@ -99,6 +100,10 @@ export type InstructionType =
   // Move/Math (output-class)
   | "MOV"   // Move               — Dest = Source (when rung TRUE)
   | "MVM"   // Masked Move        — Dest = (Source & Mask) | (Dest & ~Mask)
+  | "COP"   // Copy File          — copies Source to Dest for Length elements
+  | "CPS"   // Synchronous Copy    — copy file without interruption
+  | "BSL"   // Bit Shift Left     — shifts bits left on rung false-to-true
+  | "BSR"   // Bit Shift Right    — shifts bits right on rung false-to-true
   | "ADD"   // Add                — Dest = Source A + Source B
   | "SUB"   // Subtract           — Dest = Source A - Source B
   | "MUL"   // Multiply           — Dest = Source A * Source B
@@ -114,13 +119,13 @@ export type InstructionType =
 /** Instructions that can appear in the middle of a series path */
 export const CONTACT_INSTRUCTIONS: ReadonlySet<InstructionType> = new Set([
   "XIC", "XIO", "AFI", "OSR", "OSF", "ONS",
-  "EQU", "NEQ", "LES", "LEQ", "GRT", "GEQ",
+  "EQU", "NEQ", "LES", "LEQ", "GRT", "GEQ", "LIM",
 ]);
 
 /** Instructions that must be at the end (rightmost) of a rung path */
 export const OUTPUT_INSTRUCTIONS: ReadonlySet<InstructionType> = new Set([
   "OTE", "OTL", "OTU", "TON", "TOF", "RTO", "CTU", "CTD", "RES",
-  "MOV", "MVM", "ADD", "SUB", "MUL", "DIV", "MOD", "NEG", "ABS", "SQR", "CLR",
+  "MOV", "MVM", "COP", "CPS", "BSL", "BSR", "ADD", "SUB", "MUL", "DIV", "MOD", "NEG", "ABS", "SQR", "CLR",
   "JSR", "NOP",
 ]);
 
@@ -159,12 +164,13 @@ export interface CounterParams {
 }
 
 /**
- * Params for compare instructions (EQU, NEQ, LES, LEQ, GRT, GEQ).
+ * Params for compare instructions (EQU, NEQ, LES, LEQ, GRT, GEQ, LIM).
  * Each operand is either a tag name (string) or a numeric literal stored as string.
  */
 export interface CompareParams {
   sourceA: string;   // tag name or numeric literal, e.g. "MyTag" or "42"
   sourceB: string;
+  sourceC?: string;  // LIM only: high limit
 }
 
 /**
@@ -177,6 +183,18 @@ export interface MoveParams {
   source: string;
   dest: string;
   mask?: string;     // MVM only
+}
+
+export interface CopyParams {
+  source: string;    // tag name, array element, or literal
+  dest: string;      // tag name or array element write target
+  length: string;    // number of destination elements to copy
+}
+
+export interface BitShiftParams {
+  array: string;     // DINT/INT tag or array tag to shift
+  source: string;    // BOOL/numeric tag or literal loaded into the vacated bit
+  length: string;    // number of bits to shift
 }
 
 /**
@@ -194,7 +212,7 @@ export interface JsrParams {
   routineName: string;
 }
 
-export type InstructionParams = TimerParams | CounterParams | CompareParams | MoveParams | MathParams | JsrParams | Record<string, never>;
+export type InstructionParams = TimerParams | CounterParams | CompareParams | MoveParams | CopyParams | BitShiftParams | MathParams | JsrParams | Record<string, never>;
 
 // ---------------------------------------------------------------------------
 // AST Node types

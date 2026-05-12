@@ -26,6 +26,8 @@ import type {
   CounterParams,
   CompareParams,
   MoveParams,
+  CopyParams,
+  BitShiftParams,
   MathParams,
   JsrParams,
   InstructionParams,
@@ -72,12 +74,18 @@ function makeInstruction(type: InstructionType): InstructionNode {
     params = { preset: 1000, accum: 0 } satisfies TimerParams;
   } else if (type === "CTU" || type === "CTD") {
     params = { preset: 10, accum: 0 } satisfies CounterParams;
+  } else if (type === "LIM") {
+    params = { sourceA: "", sourceB: "", sourceC: "" } satisfies CompareParams;
   } else if (["EQU","NEQ","LES","LEQ","GRT","GEQ"].includes(type)) {
     params = { sourceA: "", sourceB: "" } satisfies CompareParams;
   } else if (type === "MOV") {
     params = { source: "", dest: "" } satisfies MoveParams;
   } else if (type === "MVM") {
     params = { source: "", dest: "", mask: "0xFFFFFFFF" } satisfies MoveParams;
+  } else if (type === "COP" || type === "CPS") {
+    params = { source: "", dest: "", length: "1" } satisfies CopyParams;
+  } else if (type === "BSL" || type === "BSR") {
+    params = { array: "", source: "", length: "32" } satisfies BitShiftParams;
   } else if (["ADD","SUB","MUL","DIV","MOD"].includes(type)) {
     params = { sourceA: "", sourceB: "", dest: "" } satisfies MathParams;
   } else if (["NEG","ABS","SQR","CLR"].includes(type)) {
@@ -247,7 +255,7 @@ export interface ProjectState {
     routineId: string,
     rungId: string,
     nodeId: string,
-    patch: Partial<TimerParams & CounterParams & CompareParams & MoveParams & MathParams & JsrParams>
+    patch: Partial<TimerParams & CounterParams & CompareParams & MoveParams & CopyParams & BitShiftParams & MathParams & JsrParams>
   ) => void;
 
   // ── Node comment
@@ -1210,7 +1218,7 @@ function withExistingOnlineEdit(updated: Rung, live?: Rung): Rung {
 function patchNodeParams(
   nodes: SeriesNode[],
   nodeId: string,
-  patch: Partial<TimerParams & CounterParams & CompareParams & MoveParams & MathParams & JsrParams>
+  patch: Partial<TimerParams & CounterParams & CompareParams & MoveParams & CopyParams & BitShiftParams & MathParams & JsrParams>
 ): boolean {
   for (const node of nodes) {
     if (node.kind === "instruction" && node.id === nodeId) {
