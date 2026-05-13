@@ -293,15 +293,60 @@ function validateStructuredTextStatement(
   tagsByName: Map<string, TagDefinition>,
   errors: StValidationError[]
 ) {
+    const timerCall = line.match(/^(TON|TOF|RTO|RES)\s*\((.*)\)\s*;?$/i);
+    if (timerCall) {
+      validateTimerCall(timerCall[1].toUpperCase(), timerCall[2], lineNumber, tagNames, tagsByName, errors);
+      return;
+    }
+
     const assignment = line.match(/^([A-Za-z_]\w*(?:\[[^\]]+\])?(?:\.\w+)?)\s*:=\s*(.+?)\s*;?$/);
     if (!assignment) {
-      errors.push({ line: lineNumber, message: "Expected assignment, IF, CASE, FOR, or WHILE statement." });
+      errors.push({ line: lineNumber, message: "Expected assignment, timer call, IF, CASE, FOR, or WHILE statement." });
       return;
     }
 
     validateDestination(assignment[1], lineNumber, tagNames, errors);
     validateExpression(assignment[1], lineNumber, tagNames, tagsByName, errors);
     validateExpression(assignment[2], lineNumber, tagNames, tagsByName, errors);
+}
+
+function validateTimerCall(
+  type: string,
+  argsText: string,
+  lineNumber: number,
+  tagNames: Set<string>,
+  tagsByName: Map<string, TagDefinition>,
+  errors: StValidationError[]
+) {
+  const args = splitStructuredTextArguments(argsText);
+  const expected = type === "RES" ? 1 : 3;
+  if (args.length < expected) {
+    errors.push({
+      line: lineNumber,
+      message: type === "RES"
+        ? "RES expects RES(TimerOrCounterTag)."
+        : `${type} expects ${type}(TimerTag, EnableExpr, PresetMs).`,
+    });
+    return;
+  }
+
+  const tagName = args[0] ?? "";
+  const tagBase = tagName.match(/^([A-Za-z_]\w*)/)?.[1].toUpperCase();
+  const tag = tagBase ? tagsByName.get(tagBase) : undefined;
+  if (!tagBase || !tagNames.has(tagBase)) {
+    errors.push({ line: lineNumber, message: `Unknown timer tag "${tagName}".` });
+  } else if (type === "RES") {
+    if (tag?.dataType !== "TIMER" && tag?.dataType !== "COUNTER") {
+      errors.push({ line: lineNumber, message: "RES target must be a TIMER or COUNTER tag." });
+    }
+  } else if (tag?.dataType !== "TIMER") {
+    errors.push({ line: lineNumber, message: `${type} target must be a TIMER tag.` });
+  }
+
+  if (type !== "RES") {
+    validateExpression(args[1] ?? "", lineNumber, tagNames, tagsByName, errors);
+    validateExpression(args[2] ?? "", lineNumber, tagNames, tagsByName, errors);
+  }
 }
 
 function validateDestination(target: string, lineNumber: number, tagNames: Set<string>, errors: StValidationError[]) {
@@ -348,6 +393,24 @@ function validateExpression(
 
 function stripBlockComments(source: string): string {
   return source.replace(/\(\*[\s\S]*?\*\)/g, "");
+}
+
+function splitStructuredTextArguments(argsText: string): string[] {
+  const args: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const char of argsText) {
+    if (char === "(" || char === "[") depth += 1;
+    if (char === ")" || char === "]") depth = Math.max(0, depth - 1);
+    if (char === "," && depth === 0) {
+      args.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  if (current.trim() || argsText.trim()) args.push(current.trim());
+  return args;
 }
 
 function getTokenAt(source: string, cursorIndex: number): { text: string; start: number; end: number } {
@@ -427,6 +490,10 @@ function getStructuredTextLanguageSuggestions(): StSuggestion[] {
     { label: "OR", insertText: "OR", detail: "boolean", kind: "operator" },
     { label: "NOT", insertText: "NOT", detail: "boolean", kind: "operator" },
     { label: "MOD", insertText: "MOD", detail: "math", kind: "operator" },
+    { label: "TON", insertText: "TON(TimerTag, EnableExpr, 1000);", detail: "timer on-delay", kind: "function" },
+    { label: "TOF", insertText: "TOF(TimerTag, EnableExpr, 1000);", detail: "timer off-delay", kind: "function" },
+    { label: "RTO", insertText: "RTO(TimerTag, EnableExpr, 1000);", detail: "retentive timer", kind: "function" },
+    { label: "RES", insertText: "RES(TimerTag);", detail: "reset timer/counter", kind: "function" },
     ...["ABS", "SQR", "SQRT", "MIN", "MAX", "LIMIT", "BAND", "BOR", "BXOR", "BNOT", "SHL", "SHR"].map<StSuggestion>(name => ({
       label: name,
       insertText: `${name}()`,
@@ -584,5 +651,6 @@ function getStructuredTextFunctionNames(): Set<string> {
   return new Set([
     "ABS", "SQR", "SQRT", "MIN", "MAX", "LIMIT",
     "BAND", "BOR", "BXOR", "BNOT", "SHL", "SHR",
+    "TON", "TOF", "RTO", "RES",
   ]);
 }

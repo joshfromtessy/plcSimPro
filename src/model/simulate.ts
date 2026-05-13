@@ -444,9 +444,9 @@ interface StBlockMarker {
 
 const ST_LOOP_LIMIT = 10_000;
 
-function executeStructuredText(source: string, tags: Map<string, TagDefinition>): void {
+function executeStructuredText(source: string, tags: Map<string, TagDefinition>, deltaMs: number): void {
   const lines = normalizeStructuredTextLines(source);
-  executeStructuredTextBlock(lines, 0, lines.length, tags);
+  executeStructuredTextBlock(lines, 0, lines.length, tags, deltaMs);
 }
 
 function stripStructuredTextBlockComments(source: string): string {
@@ -467,7 +467,8 @@ function executeStructuredTextBlock(
   lines: StLine[],
   start: number,
   end: number,
-  tags: Map<string, TagDefinition>
+  tags: Map<string, TagDefinition>,
+  deltaMs: number
 ): void {
   let index = start;
   while (index < end) {
@@ -481,7 +482,7 @@ function executeStructuredTextBlock(
     const ifMatch = line.match(/^IF\s+(.+?)\s+THEN\s*;?$/i);
     if (ifMatch) {
       const marker = findStructuredTextBlock(lines, index, end, "IF", [], ["END_IF"]);
-      executeStructuredTextIf(lines, index, marker.endIndex, ifMatch[1], tags);
+      executeStructuredTextIf(lines, index, marker.endIndex, ifMatch[1], tags, deltaMs);
       index = marker.endIndex + 1;
       continue;
     }
@@ -491,7 +492,7 @@ function executeStructuredTextBlock(
       const marker = findStructuredTextBlock(lines, index, end, "WHILE", [], ["END_WHILE"]);
       let guard = 0;
       while (Boolean(evaluateStructuredTextExpression(whileMatch[1], tags)) && guard < ST_LOOP_LIMIT) {
-        executeStructuredTextBlock(lines, index + 1, marker.endIndex, tags);
+        executeStructuredTextBlock(lines, index + 1, marker.endIndex, tags, deltaMs);
         guard += 1;
       }
       index = marker.endIndex + 1;
@@ -510,7 +511,7 @@ function executeStructuredTextBlock(
       const shouldContinue = () => stepValue >= 0 ? loopValue <= endValue : loopValue >= endValue;
       while (shouldContinue() && guard < ST_LOOP_LIMIT) {
         writeStructuredTextValue(target, loopValue, tags);
-        executeStructuredTextBlock(lines, index + 1, marker.endIndex, tags);
+        executeStructuredTextBlock(lines, index + 1, marker.endIndex, tags, deltaMs);
         loopValue += stepValue;
         guard += 1;
       }
@@ -522,20 +523,116 @@ function executeStructuredTextBlock(
     const caseMatch = line.match(/^CASE\s+(.+?)\s+OF\s*;?$/i);
     if (caseMatch) {
       const marker = findStructuredTextBlock(lines, index, end, "CASE", [], ["END_CASE"]);
-      executeStructuredTextCase(lines, index + 1, marker.endIndex, evaluateStructuredTextExpression(caseMatch[1], tags), tags);
+      executeStructuredTextCase(lines, index + 1, marker.endIndex, evaluateStructuredTextExpression(caseMatch[1], tags), tags, deltaMs);
       index = marker.endIndex + 1;
       continue;
     }
 
-    executeStructuredTextStatement(line, tags);
+    executeStructuredTextStatement(line, tags, deltaMs);
     index += 1;
   }
 }
 
-function executeStructuredTextStatement(line: string, tags: Map<string, TagDefinition>): void {
+function executeStructuredTextStatement(line: string, tags: Map<string, TagDefinition>, deltaMs: number): void {
+  if (executeStructuredTextTimerStatement(line, tags, deltaMs)) return;
   const assignMatch = line.match(/^([A-Za-z_]\w*(?:\[[^\]]+\])?(?:\.\w+)?)\s*:=\s*(.+?)\s*;?$/);
   if (!assignMatch) return;
   writeStructuredTextValue(assignMatch[1], evaluateStructuredTextExpression(assignMatch[2], tags), tags);
+}
+
+function executeStructuredTextTimerStatement(
+  line: string,
+  tags: Map<string, TagDefinition>,
+  deltaMs: number
+): boolean {
+  const callMatch = line.match(/^(TON|TOF|RTO|RES)\s*\((.*)\)\s*;?$/i);
+  if (!callMatch) return false;
+
+  const type = callMatch[1].toUpperCase();
+  const args = splitStructuredTextArguments(callMatch[2]);
+  if (type === "RES") {
+    const tag = tags.get(parseStructuredTextRef(args[0] ?? "", tags).base);
+    if (tag?.dataType === "TIMER" && tag.timerData) {
+      tag.timerData.en = false;
+      tag.timerData.tt = false;
+      tag.timerData.dn = false;
+      tag.timerData.accum = 0;
+      delete tag.timerData._startMs;
+    }
+    if (tag?.dataType === "COUNTER" && tag.counterData) {
+      tag.counterData.cu = false;
+      tag.counterData.cd = false;
+      tag.counterData.dn = false;
+      tag.counterData.ov = false;
+      tag.counterData.un = false;
+      tag.counterData.accum = 0;
+    }
+    return true;
+  }
+
+  const tag = tags.get(parseStructuredTextRef(args[0] ?? "", tags).base);
+  if (!tag || tag.dataType !== "TIMER" || !tag.timerData) return true;
+
+  const enabled = Boolean(evaluateStructuredTextExpression(args[1] ?? "FALSE", tags));
+  const presetArg = args[2];
+  const preset = presetArg !== undefined
+    ? Math.max(0, Number(evaluateStructuredTextExpression(presetArg, tags)) || 0)
+    : tag.timerData.preset;
+  tag.timerData.preset = preset;
+
+  if (type === "TON") executeStructuredTextTon(tag.timerData, enabled, preset, deltaMs);
+  if (type === "TOF") executeStructuredTextTof(tag.timerData, enabled, preset, deltaMs);
+  if (type === "RTO") executeStructuredTextRto(tag.timerData, enabled, preset, deltaMs);
+  return true;
+}
+
+function executeStructuredTextTon(td: TimerData, enabled: boolean, preset: number, deltaMs: number): void {
+  if (enabled) {
+    td.en = true;
+    if (!td.dn) td.accum = Math.min(td.accum + deltaMs, preset);
+    td.dn = td.accum >= preset;
+    td.tt = !td.dn;
+    if (td.dn) td.accum = preset;
+  } else {
+    td.en = false;
+    td.tt = false;
+    td.dn = false;
+    td.accum = 0;
+  }
+}
+
+function executeStructuredTextTof(td: TimerData, enabled: boolean, preset: number, deltaMs: number): void {
+  if (enabled) {
+    td.en = true;
+    td.tt = false;
+    td.dn = true;
+    td.accum = 0;
+    return;
+  }
+
+  td.en = false;
+  if (td.dn) {
+    td.tt = true;
+    td.accum = Math.min(td.accum + deltaMs, preset);
+    if (td.accum >= preset) {
+      td.accum = preset;
+      td.dn = false;
+      td.tt = false;
+    }
+  }
+}
+
+function executeStructuredTextRto(td: TimerData, enabled: boolean, preset: number, deltaMs: number): void {
+  if (enabled) {
+    td.en = true;
+    if (!td.dn) td.accum = Math.min(td.accum + deltaMs, preset);
+    td.dn = td.accum >= preset;
+    td.tt = !td.dn;
+    if (td.dn) td.accum = preset;
+  } else {
+    td.en = false;
+    td.tt = false;
+  }
 }
 
 function executeStructuredTextIf(
@@ -543,13 +640,14 @@ function executeStructuredTextIf(
   ifIndex: number,
   endIndex: number,
   firstCondition: string,
-  tags: Map<string, TagDefinition>
+  tags: Map<string, TagDefinition>,
+  deltaMs: number
 ): void {
   const branches = collectStructuredTextIfBranches(lines, ifIndex, endIndex, firstCondition);
   const branch = branches.find(candidate =>
     candidate.condition === null || Boolean(evaluateStructuredTextExpression(candidate.condition, tags))
   );
-  if (branch) executeStructuredTextBlock(lines, branch.start, branch.end, tags);
+  if (branch) executeStructuredTextBlock(lines, branch.start, branch.end, tags, deltaMs);
 }
 
 function collectStructuredTextIfBranches(
@@ -614,14 +712,15 @@ function executeStructuredTextCase(
   start: number,
   end: number,
   caseValue: number | boolean,
-  tags: Map<string, TagDefinition>
+  tags: Map<string, TagDefinition>,
+  deltaMs: number
 ): void {
   const branches = collectStructuredTextCaseBranches(lines, start, end);
   const numericCaseValue = Number(caseValue);
   const selected = branches.find(branch =>
     branch.isElse || branch.labels.some(label => isStructuredTextCaseLabelMatch(label, numericCaseValue, tags))
   );
-  if (selected) executeStructuredTextBlock(lines, selected.start, selected.end, tags);
+  if (selected) executeStructuredTextBlock(lines, selected.start, selected.end, tags, deltaMs);
 }
 
 function collectStructuredTextCaseBranches(lines: StLine[], start: number, end: number) {
@@ -673,6 +772,24 @@ function isStructuredTextCaseLabelMatch(label: string, caseValue: number, tags: 
     return caseValue >= Math.min(low, high) && caseValue <= Math.max(low, high);
   }
   return caseValue === Number(evaluateStructuredTextExpression(label, tags));
+}
+
+function splitStructuredTextArguments(argsText: string): string[] {
+  const args: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const char of argsText) {
+    if (char === "(" || char === "[") depth += 1;
+    if (char === ")" || char === "]") depth = Math.max(0, depth - 1);
+    if (char === "," && depth === 0) {
+      args.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  if (current.trim() || argsText.trim()) args.push(current.trim());
+  return args;
 }
 
 function findStructuredTextBlock(
@@ -1347,7 +1464,7 @@ function executeRoutine(
   ctx.callStack.push(routine.id);
 
   if (routine.language === "ST") {
-    executeStructuredText(routine.structuredText ?? "", tagMap);
+    executeStructuredText(routine.structuredText ?? "", tagMap, deltaMs);
     ctx.callStack.pop();
     return;
   }

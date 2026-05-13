@@ -135,6 +135,7 @@ export function HelpPage({ theme }: HelpPageProps) {
           <li>Supported statements include assignments, IF / ELSIF / ELSE, CASE, FOR, and WHILE.</li>
           <li>Expressions support math, comparisons, BOOL logic, dynamic array indexing, and dynamic bit indexing.</li>
           <li>Supported helper functions include BAND, BOR, BXOR, BNOT, SHL, and SHR.</li>
+          <li>Timer calls support TON, TOF, RTO, and RES using TIMER tags and millisecond presets.</li>
           <li>Autocomplete suggests keywords, functions, and existing tags. Arrow keys move through suggestions.</li>
         </ul>
         <pre className="help-code">{`IF StartPB AND NOT StopPB THEN
@@ -157,6 +158,15 @@ FOR idx := 0 TO 31 DO
     BitCount := BitCount + 1;
   END_IF;
 END_FOR;`}</pre>
+        <pre className="help-code">{`TON(StartDelay, StartPB, 2000);
+
+IF StartDelay.DN THEN
+  MotorRun := TRUE;
+END_IF;
+
+IF StopPB THEN
+  RES(StartDelay);
+END_IF;`}</pre>
       </details>
 
       <details className="page-card help-details">
