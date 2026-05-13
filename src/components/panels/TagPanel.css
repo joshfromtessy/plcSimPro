@@ -247,6 +247,32 @@
   padding: 4px 8px;
 }
 
+.tag-row-main--structured {
+  grid-template-columns: 14px minmax(0, 1fr) auto 16px;
+  row-gap: 2px;
+}
+
+.tag-row-main--structured .tag-row-name {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.tag-row-main--structured .tag-row-type {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.tag-row-main--structured .tag-row-value {
+  grid-column: 2 / 4;
+  grid-row: 2;
+  min-width: 0;
+}
+
+.tag-row-main--structured .tag-delete-btn {
+  grid-column: 4;
+  grid-row: 1;
+}
+
 .tag-row-main[draggable="true"] {
   cursor: grab;
 }
@@ -421,9 +447,14 @@
 }
 
 .tag-structured {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
   font-size: 9px;
   font-family: ui-monospace, Consolas, monospace;
   color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tag-num {

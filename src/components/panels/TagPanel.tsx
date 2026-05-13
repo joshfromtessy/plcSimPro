@@ -181,6 +181,7 @@ function TagRow({
   const isWordType   = tag.dataType === "DINT" || tag.dataType === "INT";
   const isExpandable = isWordType; // DINT/INT always expandable (array elements or scalar bits)
   const isNumeric    = NUMERIC_TYPES.has(tag.dataType);
+  const isStructured = tag.dataType === "TIMER" || tag.dataType === "COUNTER";
 
   // ── Scalar numeric value editing ──────────────────────────────────────────
   const [editing, setEditing]   = useState(false);
@@ -253,7 +254,7 @@ function TagRow({
     <div className={`tag-row ${tag.dataType === "BOOL" && tag.value ? "tag-row--true" : ""}`}>
       {/* ── Main row: name · type · value · delete ── */}
       <div
-        className="tag-row-main"
+        className={`tag-row-main${isStructured ? " tag-row-main--structured" : ""}`}
         draggable
         onDragStart={handleDragStart}
         onDragEnd={clearDraggedTagPayload}
@@ -292,12 +293,12 @@ function TagRow({
               EN:{tag.timerData.en ? "1" : "0"}
               {" "}TT:{tag.timerData.tt ? "1" : "0"}
               {" "}DN:{tag.timerData.dn ? "1" : "0"}
-              {" "}ACC:{tag.timerData.accum}
+              {" "}ACC:{formatWholeNumber(tag.timerData.accum)}
             </span>
           ) : tag.dataType === "COUNTER" && tag.counterData ? (
             <span className="tag-structured">
               DN:{tag.counterData.dn ? "1" : "0"}
-              {" "}ACC:{tag.counterData.accum}
+              {" "}ACC:{formatWholeNumber(tag.counterData.accum)}
             </span>
           ) : isNumeric && !isArray ? (
             editing ? (
@@ -373,6 +374,10 @@ function TagRow({
       )}
     </div>
   );
+}
+
+function formatWholeNumber(value: number): string {
+  return String(Math.round(value));
 }
 
 /** Renders the 32 (or 16) bit rows for a scalar DINT/INT tag. */
