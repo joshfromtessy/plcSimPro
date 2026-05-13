@@ -127,8 +127,8 @@
 }
 
 .cloud-project-popover {
-  width: 300px;
-  max-height: 380px;
+  width: 330px;
+  max-height: 520px;
   overflow-y: auto;
 }
 
@@ -163,6 +163,12 @@
   color: var(--accent-blue);
   font-weight: 700;
   margin-bottom: 8px;
+}
+
+.community-publish-toggle {
+  border-color: rgba(34, 204, 102, 0.5) !important;
+  background: rgba(34, 204, 102, 0.1) !important;
+  color: var(--accent-green) !important;
 }
 
 .toolbar-menu-row.danger {
@@ -271,6 +277,43 @@
   color: var(--text-dim);
   font-size: 10px;
   font-style: normal;
+}
+
+.community-publish-form {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-app);
+}
+
+.community-publish-form textarea {
+  resize: vertical;
+}
+
+.community-project-row {
+  cursor: default;
+}
+
+.community-project-row:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.community-unpublish-btn {
+  margin-top: 4px;
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 68, 85, 0.35);
+  border-radius: 4px;
+  background: rgba(255, 68, 85, 0.08);
+  color: var(--accent-red);
+  font-size: 10px;
+}
+
+.community-unpublish-btn:hover {
+  border-color: var(--accent-red);
 }
 
 .cloud-project-meta,

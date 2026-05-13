@@ -224,6 +224,7 @@ export function Toolbar({ theme, onToggleTheme }: ToolbarProps) {
       <div className="toolbar-right">
         <nav className="toolbar-nav" aria-label="Site">
           <NavLink to="/" end>Editor</NavLink>
+          <NavLink to="/community">Community</NavLink>
           <NavLink to="/help">Help</NavLink>
           <NavLink to="/about">About</NavLink>
         </nav>

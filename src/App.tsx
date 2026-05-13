@@ -5,6 +5,8 @@ import { AboutPage } from "./pages/AboutPage";
 import { HelpPage } from "./pages/HelpPage";
 import { AuthPage } from "./pages/AuthPage";
 import { AccountPage } from "./pages/AccountPage";
+import { CommunityPage } from "./pages/CommunityPage";
+import { CommunityProjectPage } from "./pages/CommunityProjectPage";
 import { useAuthStore } from "./store/authStore";
 import "./App.css";
 
@@ -27,6 +29,8 @@ export default function App() {
           />
         }
       />
+      <Route path="/community" element={<CommunityPage theme={theme} />} />
+      <Route path="/community/:id" element={<CommunityProjectPage theme={theme} />} />
       <Route path="/help" element={<HelpPage theme={theme} />} />
       <Route path="/about" element={<AboutPage theme={theme} />} />
       <Route path="/login" element={<AuthPage theme={theme} mode="login" />} />

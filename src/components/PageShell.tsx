@@ -19,6 +19,7 @@ export function PageShell({ theme, title, eyebrow, children, contentClassName = 
         <NavLink className="page-brand" to="/">PLC Sim</NavLink>
         <nav className="page-nav" aria-label="Site">
           <NavLink to="/" end>Editor</NavLink>
+          <NavLink to="/community">Community</NavLink>
           <NavLink to="/help">Help</NavLink>
           <NavLink to="/about">About</NavLink>
           <NavLink to={user ? "/account" : "/login"}>

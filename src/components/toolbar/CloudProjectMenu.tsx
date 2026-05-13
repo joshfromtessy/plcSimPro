@@ -1,4 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  listMyCommunityProjects,
+  parseTagInput,
+  publishCommunityProject,
+  unpublishCommunityProject,
+  type CommunityProjectSummary,
+} from "../../lib/communityProjects";
 import { useCloudProjectStore } from "../../store/cloudProjectStore";
 import { useProjectStore } from "../../store/projectStore";
 
@@ -16,11 +23,20 @@ export function CloudProjectMenu() {
     clearError,
   } = useCloudProjectStore();
   const [open, setOpen] = useState(false);
+  const [communityProjects, setCommunityProjects] = useState<CommunityProjectSummary[]>([]);
+  const [communityLoading, setCommunityLoading] = useState(false);
+  const [communityError, setCommunityError] = useState<string | null>(null);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishTitle, setPublishTitle] = useState(project.name);
+  const [publishDescription, setPublishDescription] = useState("");
+  const [publishAuthor, setPublishAuthor] = useState("");
+  const [publishTags, setPublishTags] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     void refreshProjects();
+    void refreshCommunityProjects();
   }, [open, refreshProjects]);
 
   useEffect(() => {
@@ -42,6 +58,55 @@ export function CloudProjectMenu() {
     setOpen(false);
   }
 
+  function handlePublishToggle() {
+    if (!publishOpen) setPublishTitle(project.name);
+    setPublishOpen(value => !value);
+  }
+
+  async function refreshCommunityProjects() {
+    setCommunityLoading(true);
+    setCommunityError(null);
+    try {
+      const items = await listMyCommunityProjects();
+      setCommunityProjects(items);
+    } catch (err) {
+      setCommunityError(getErrorMessage(err));
+    } finally {
+      setCommunityLoading(false);
+    }
+  }
+
+  async function handlePublish() {
+    setCommunityLoading(true);
+    setCommunityError(null);
+    try {
+      await publishCommunityProject(project, {
+        title: publishTitle,
+        description: publishDescription,
+        authorDisplayName: publishAuthor,
+        tags: parseTagInput(publishTags),
+      });
+      setPublishOpen(false);
+      await refreshCommunityProjects();
+    } catch (err) {
+      setCommunityError(getErrorMessage(err));
+      setCommunityLoading(false);
+    }
+  }
+
+  async function handleUnpublish(id: string, title: string) {
+    if (!window.confirm(`Unpublish "${title}" from Community?`)) return;
+    setCommunityLoading(true);
+    setCommunityError(null);
+    try {
+      await unpublishCommunityProject(id);
+      await refreshCommunityProjects();
+    } catch (err) {
+      setCommunityError(getErrorMessage(err));
+      setCommunityLoading(false);
+    }
+  }
+
   return (
     <div className="toolbar-menu" ref={menuRef}>
       <button className="toolbar-btn" onClick={() => setOpen((value) => !value)}>
@@ -58,9 +123,56 @@ export function CloudProjectMenu() {
           <button className="toolbar-menu-row primary" onClick={handleSave} disabled={loading}>
             Save current project
           </button>
+          <button
+            className="toolbar-menu-row primary community-publish-toggle"
+            onClick={handlePublishToggle}
+            disabled={communityLoading}
+          >
+            Publish to Community
+          </button>
+          {publishOpen && (
+            <div className="community-publish-form">
+              <label>
+                <span>Title</span>
+                <input value={publishTitle} onChange={event => setPublishTitle(event.target.value)} />
+              </label>
+              <label>
+                <span>Description</span>
+                <textarea
+                  rows={3}
+                  value={publishDescription}
+                  onChange={event => setPublishDescription(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Author</span>
+                <input
+                  value={publishAuthor}
+                  placeholder="Display name"
+                  onChange={event => setPublishAuthor(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Tags</span>
+                <input
+                  value={publishTags}
+                  placeholder="timer, sequencing"
+                  onChange={event => setPublishTags(event.target.value)}
+                />
+              </label>
+              <button className="toolbar-menu-row primary" onClick={() => void handlePublish()} disabled={communityLoading}>
+                Publish now
+              </button>
+            </div>
+          )}
           {error && (
             <button className="cloud-project-error" onClick={clearError}>
               {error}
+            </button>
+          )}
+          {communityError && (
+            <button className="cloud-project-error" onClick={() => setCommunityError(null)}>
+              {communityError}
             </button>
           )}
           {lastSavedAt && (
@@ -83,8 +195,30 @@ export function CloudProjectMenu() {
               <em>{new Date(item.updated_at).toLocaleString()}</em>
             </button>
           ))}
+          <div className="cloud-project-section-label">Published to community</div>
+          {communityLoading && <div className="cloud-project-empty">Working...</div>}
+          {!communityLoading && communityProjects.length === 0 && (
+            <div className="cloud-project-empty">No published projects yet.</div>
+          )}
+          {!communityLoading && communityProjects.map((item) => (
+            <div className="cloud-project-row community-project-row" key={item.id}>
+              <span>{item.title}</span>
+              <em>{item.clone_count} clones - {new Date(item.updated_at).toLocaleString()}</em>
+              <button
+                className="community-unpublish-btn"
+                type="button"
+                onClick={() => void handleUnpublish(item.id, item.title)}
+              >
+                Unpublish
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
+}
+
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "Community project operation failed.";
 }

@@ -35,3 +35,76 @@ using ((select auth.uid()) = user_id);
 
 create index if not exists projects_user_updated_idx
 on public.projects (user_id, updated_at desc);
+
+-- Community project snapshots are public, read-only examples cloned from user
+-- projects. They intentionally live outside the private projects table.
+
+create table if not exists public.community_projects (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  source_project_id text not null,
+  title text not null default 'Untitled Project',
+  description text not null default '',
+  author_display_name text not null default 'PLC Sim User',
+  tags text[] not null default '{}',
+  data jsonb not null,
+  published boolean not null default true,
+  clone_count integer not null default 0 check (clone_count >= 0),
+  published_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (owner_id, source_project_id)
+);
+
+grant select on public.community_projects to anon;
+grant select, insert, update, delete on public.community_projects to authenticated;
+grant select, insert, update, delete on public.community_projects to service_role;
+
+alter table public.community_projects enable row level security;
+
+drop policy if exists "Anyone can read published community projects" on public.community_projects;
+create policy "Anyone can read published community projects"
+on public.community_projects for select
+to anon, authenticated
+using (published = true);
+
+drop policy if exists "Users can publish community projects" on public.community_projects;
+create policy "Users can publish community projects"
+on public.community_projects for insert
+to authenticated
+with check ((select auth.uid()) = owner_id);
+
+drop policy if exists "Users can update their community projects" on public.community_projects;
+create policy "Users can update their community projects"
+on public.community_projects for update
+to authenticated
+using ((select auth.uid()) = owner_id)
+with check ((select auth.uid()) = owner_id);
+
+drop policy if exists "Users can delete their community projects" on public.community_projects;
+create policy "Users can delete their community projects"
+on public.community_projects for delete
+to authenticated
+using ((select auth.uid()) = owner_id);
+
+create index if not exists community_projects_published_updated_idx
+on public.community_projects (published, updated_at desc);
+
+create index if not exists community_projects_published_clone_idx
+on public.community_projects (published, clone_count desc, updated_at desc);
+
+create index if not exists community_projects_tags_idx
+on public.community_projects using gin (tags);
+
+create or replace function public.increment_community_project_clone_count(project_id uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update public.community_projects
+  set clone_count = clone_count + 1
+  where id = project_id and published = true;
+$$;
+
+grant execute on function public.increment_community_project_clone_count(uuid) to anon;
+grant execute on function public.increment_community_project_clone_count(uuid) to authenticated;
