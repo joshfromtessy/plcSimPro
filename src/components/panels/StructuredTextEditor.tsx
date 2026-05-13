@@ -598,19 +598,19 @@ function renderSyntaxToken(
 function formatTagValue(tag: TagDefinition, ref: string): string {
   if (tag.dataType === "TIMER" && tag.timerData) {
     const member = ref.split(".")[1]?.toUpperCase();
-    if (member === "PRE") return String(tag.timerData.preset);
-    if (member === "ACC") return String(tag.timerData.accum);
+    if (member === "PRE") return formatWholeNumber(tag.timerData.preset);
+    if (member === "ACC") return formatWholeNumber(tag.timerData.accum);
     if (member === "EN") return String(tag.timerData.en);
     if (member === "TT") return String(tag.timerData.tt);
     if (member === "DN") return String(tag.timerData.dn);
-    return `PRE ${tag.timerData.preset} ACC ${tag.timerData.accum}`;
+    return `PRE ${formatWholeNumber(tag.timerData.preset)} ACC ${formatWholeNumber(tag.timerData.accum)}`;
   }
   if (tag.dataType === "COUNTER" && tag.counterData) {
     const member = ref.split(".")[1]?.toUpperCase();
-    if (member === "PRE") return String(tag.counterData.preset);
-    if (member === "ACC") return String(tag.counterData.accum);
+    if (member === "PRE") return formatWholeNumber(tag.counterData.preset);
+    if (member === "ACC") return formatWholeNumber(tag.counterData.accum);
     if (member === "DN") return String(tag.counterData.dn);
-    return `PRE ${tag.counterData.preset} ACC ${tag.counterData.accum}`;
+    return `PRE ${formatWholeNumber(tag.counterData.preset)} ACC ${formatWholeNumber(tag.counterData.accum)}`;
   }
   if (Array.isArray(tag.value)) return `[${tag.value.join(", ")}]`;
   return String(tag.value);
@@ -621,6 +621,10 @@ function formatInlineValue(tag: TagDefinition, ref: string): string {
   if (value === "true") return "1";
   if (value === "false") return "0";
   return value;
+}
+
+function formatWholeNumber(value: number): string {
+  return String(Math.round(value));
 }
 
 function getStructuredTextKeywords(): Set<string> {
