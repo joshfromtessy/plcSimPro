@@ -293,7 +293,7 @@ function validateStructuredTextStatement(
   tagsByName: Map<string, TagDefinition>,
   errors: StValidationError[]
 ) {
-    const timerCall = line.match(/^(TON|TOF|RTO|RES)\s*\((.*)\)\s*;?$/i);
+    const timerCall = line.match(/^(TON|TOF|RTO|TONR|RES)\s*\((.*)\)\s*;?$/i);
     if (timerCall) {
       validateTimerCall(timerCall[1].toUpperCase(), timerCall[2], lineNumber, tagNames, tagsByName, errors);
       return;
@@ -493,6 +493,7 @@ function getStructuredTextLanguageSuggestions(): StSuggestion[] {
     { label: "TON", insertText: "TON(TimerTag, EnableExpr, 1000);", detail: "timer on-delay", kind: "function" },
     { label: "TOF", insertText: "TOF(TimerTag, EnableExpr, 1000);", detail: "timer off-delay", kind: "function" },
     { label: "RTO", insertText: "RTO(TimerTag, EnableExpr, 1000);", detail: "retentive timer", kind: "function" },
+    { label: "TONR", insertText: "TONR(TimerTag, EnableExpr, 1000);", detail: "Studio retentive timer", kind: "function" },
     { label: "RES", insertText: "RES(TimerTag);", detail: "reset timer/counter", kind: "function" },
     ...["ABS", "SQR", "SQRT", "MIN", "MAX", "LIMIT", "BAND", "BOR", "BXOR", "BNOT", "SHL", "SHR"].map<StSuggestion>(name => ({
       label: name,
@@ -651,6 +652,6 @@ function getStructuredTextFunctionNames(): Set<string> {
   return new Set([
     "ABS", "SQR", "SQRT", "MIN", "MAX", "LIMIT",
     "BAND", "BOR", "BXOR", "BNOT", "SHL", "SHR",
-    "TON", "TOF", "RTO", "RES",
+    "TON", "TOF", "RTO", "TONR", "RES",
   ]);
 }

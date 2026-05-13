@@ -545,7 +545,7 @@ function executeStructuredTextTimerStatement(
   tags: Map<string, TagDefinition>,
   deltaMs: number
 ): boolean {
-  const callMatch = line.match(/^(TON|TOF|RTO|RES)\s*\((.*)\)\s*;?$/i);
+  const callMatch = line.match(/^(TON|TOF|RTO|TONR|RES)\s*\((.*)\)\s*;?$/i);
   if (!callMatch) return false;
 
   const type = callMatch[1].toUpperCase();
@@ -582,7 +582,7 @@ function executeStructuredTextTimerStatement(
 
   if (type === "TON") executeStructuredTextTon(tag.timerData, enabled, preset, deltaMs);
   if (type === "TOF") executeStructuredTextTof(tag.timerData, enabled, preset, deltaMs);
-  if (type === "RTO") executeStructuredTextRto(tag.timerData, enabled, preset, deltaMs);
+  if (type === "RTO" || type === "TONR") executeStructuredTextRto(tag.timerData, enabled, preset, deltaMs);
   return true;
 }
 

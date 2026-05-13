@@ -135,7 +135,7 @@ export function HelpPage({ theme }: HelpPageProps) {
           <li>Supported statements include assignments, IF / ELSIF / ELSE, CASE, FOR, and WHILE.</li>
           <li>Expressions support math, comparisons, BOOL logic, dynamic array indexing, and dynamic bit indexing.</li>
           <li>Supported helper functions include BAND, BOR, BXOR, BNOT, SHL, and SHR.</li>
-          <li>Timer calls support TON, TOF, RTO, and RES using TIMER tags and millisecond presets.</li>
+          <li>Timer calls support TON, TOF, RTO, TONR, and RES using TIMER tags and millisecond presets.</li>
           <li>Autocomplete suggests keywords, functions, and existing tags. Arrow keys move through suggestions.</li>
         </ul>
         <pre className="help-code">{`IF StartPB AND NOT StopPB THEN
@@ -166,6 +166,15 @@ END_IF;
 
 IF StopPB THEN
   RES(StartDelay);
+END_IF;`}</pre>
+        <pre className="help-code">{`TONR(RuntimeTimer, MotorRun, 5000);
+
+IF RuntimeTimer.DN THEN
+  MaintenanceDue := TRUE;
+END_IF;
+
+IF ResetRuntime THEN
+  RES(RuntimeTimer);
 END_IF;`}</pre>
       </details>
 
