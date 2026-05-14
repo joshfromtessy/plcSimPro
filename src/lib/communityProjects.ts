@@ -2,8 +2,6 @@ import type { PlcProject } from "../model/types";
 import { genId } from "../model/ast";
 import { supabase } from "./supabase";
 
-export type CommunitySort = "recent" | "popular";
-
 export interface CommunityProjectSummary {
   id: string;
   title: string;
@@ -12,6 +10,7 @@ export interface CommunityProjectSummary {
   tags: string[];
   updated_at: string;
   clone_count: number;
+  language_mix: CommunityLanguageMix;
 }
 
 export interface CommunityProjectDetail extends CommunityProjectSummary {
@@ -24,7 +23,6 @@ export interface CommunityProjectDetail extends CommunityProjectSummary {
 export interface CommunityProjectFilters {
   search?: string;
   tags?: string[];
-  sort?: CommunitySort;
 }
 
 export interface CommunityPublishMetadata {
@@ -32,6 +30,13 @@ export interface CommunityPublishMetadata {
   description: string;
   authorDisplayName: string;
   tags: string[];
+}
+
+export interface CommunityLanguageMix {
+  ladderPercent: number;
+  structuredTextPercent: number;
+  ladderRoutines: number;
+  structuredTextRoutines: number;
 }
 
 type CommunityProjectRow = {
@@ -53,11 +58,9 @@ export async function listCommunityProjects(filters: CommunityProjectFilters = {
 
   const search = filters.search?.trim();
   const tags = normalizeTags(filters.tags ?? []);
-  const sort = filters.sort ?? "recent";
-
   let query = supabase
     .from("community_projects")
-    .select("id, title, description, author_display_name, tags, updated_at, clone_count")
+    .select("id, title, description, author_display_name, tags, data, updated_at, clone_count")
     .eq("published", true);
 
   if (search) {
@@ -69,9 +72,7 @@ export async function listCommunityProjects(filters: CommunityProjectFilters = {
     query = query.contains("tags", tags);
   }
 
-  query = sort === "popular"
-    ? query.order("clone_count", { ascending: false }).order("updated_at", { ascending: false })
-    : query.order("updated_at", { ascending: false });
+  query = query.order("updated_at", { ascending: false });
 
   const { data, error } = await query.limit(60);
   if (error) throw error;
@@ -153,11 +154,6 @@ export async function listMyCommunityProjects() {
   return (data ?? []).map(toSummary);
 }
 
-export async function incrementCloneCount(projectId: string) {
-  if (!supabase) return;
-  await supabase.rpc("increment_community_project_clone_count", { project_id: projectId });
-}
-
 export function cloneCommunityProject(project: PlcProject): PlcProject {
   const now = new Date().toISOString();
   return {
@@ -179,6 +175,7 @@ function toSummary(row: {
   description: string;
   author_display_name: string;
   tags: string[] | null;
+  data?: PlcProject;
   updated_at: string;
   clone_count: number;
 }): CommunityProjectSummary {
@@ -190,6 +187,7 @@ function toSummary(row: {
     tags: row.tags ?? [],
     updated_at: row.updated_at,
     clone_count: row.clone_count,
+    language_mix: getLanguageMix(row.data),
   };
 }
 
@@ -216,4 +214,27 @@ function normalizeTags(tags: string[]) {
 
 function escapeIlike(value: string) {
   return value.replace(/[%_]/g, match => `\\${match}`);
+}
+
+function getLanguageMix(project?: PlcProject): CommunityLanguageMix {
+  const routines = project?.programs.flatMap(program => program.routines) ?? [];
+  const ladderRoutines = routines.filter(routine => (routine.language ?? "LAD") === "LAD").length;
+  const structuredTextRoutines = routines.filter(routine => routine.language === "ST").length;
+  const total = ladderRoutines + structuredTextRoutines;
+
+  if (total === 0) {
+    return {
+      ladderPercent: 0,
+      structuredTextPercent: 0,
+      ladderRoutines: 0,
+      structuredTextRoutines: 0,
+    };
+  }
+
+  return {
+    ladderPercent: Math.round((ladderRoutines / total) * 100),
+    structuredTextPercent: Math.round((structuredTextRoutines / total) * 100),
+    ladderRoutines,
+    structuredTextRoutines,
+  };
 }

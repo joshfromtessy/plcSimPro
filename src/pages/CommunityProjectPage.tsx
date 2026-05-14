@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { CommunityRoutinePreview } from "../components/community/CommunityRoutinePreview";
 import { PageShell } from "../components/PageShell";
 import {
   cloneCommunityProject,
-  incrementCloneCount,
   loadCommunityProject,
   type CommunityProjectDetail,
 } from "../lib/communityProjects";
@@ -21,6 +21,7 @@ export function CommunityProjectPage({ theme }: CommunityProjectPageProps) {
   const loadProject = useProjectStore((state) => state.loadProject);
   const setCurrentProjectId = useCloudProjectStore((state) => state.setCurrentProjectId);
   const [project, setProject] = useState<CommunityProjectDetail | null>(null);
+  const [selectedRoutineId, setSelectedRoutineId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,6 +32,7 @@ export function CommunityProjectPage({ theme }: CommunityProjectPageProps) {
       .then(item => {
         if (!alive) return;
         setProject(item);
+        setSelectedRoutineId(item.data.programs[0]?.routines[0]?.id ?? null);
         setLoading(false);
       })
       .catch(err => {
@@ -54,6 +56,12 @@ export function CommunityProjectPage({ theme }: CommunityProjectPageProps) {
       tags: project.data.tags.length,
     };
   }, [project]);
+  const selectedRoutine = useMemo(() => {
+    if (!project || !selectedRoutineId) return null;
+    return project.data.programs
+      .flatMap(program => program.routines)
+      .find(routine => routine.id === selectedRoutineId) ?? null;
+  }, [project, selectedRoutineId]);
 
   if (!id) return <Navigate to="/community" replace />;
 
@@ -66,7 +74,6 @@ export function CommunityProjectPage({ theme }: CommunityProjectPageProps) {
 
     loadProject(cloneCommunityProject(project.data));
     setCurrentProjectId(null);
-    void incrementCloneCount(project.id);
     navigate("/");
   }
 
@@ -95,7 +102,7 @@ export function CommunityProjectPage({ theme }: CommunityProjectPageProps) {
             <dl className="community-preview-meta">
               <div><dt>Author</dt><dd>{project.author_display_name}</dd></div>
               <div><dt>Updated</dt><dd>{new Date(project.updated_at).toLocaleString()}</dd></div>
-              <div><dt>Clones</dt><dd>{project.clone_count}</dd></div>
+              <div><dt>Tags</dt><dd>{project.tags.length}</dd></div>
             </dl>
           </section>
 
@@ -106,21 +113,45 @@ export function CommunityProjectPage({ theme }: CommunityProjectPageProps) {
             <div><strong>{stats.tags}</strong><span>Tags</span></div>
           </section>
 
-          <section className="page-card">
-            <h2>Read-only project outline</h2>
-            <div className="community-outline">
-              {project.data.programs.map(program => (
-                <div className="community-outline-program" key={program.id}>
-                  <strong>{program.name}</strong>
-                  {program.routines.map(routine => (
-                    <div className="community-outline-routine" key={routine.id}>
-                      <span>{routine.name}</span>
-                      <em>{routine.language} - {routine.language === "ST" ? `${(routine.structuredText ?? "").split(/\r?\n/).length} lines` : `${routine.rungs.length} rungs`}</em>
-                    </div>
-                  ))}
+          <section className="community-preview-workbench" aria-label="Read-only project preview">
+            <aside className="page-card community-preview-sidebar">
+              <h2>Routines</h2>
+              <div className="community-outline">
+                {project.data.programs.map(program => (
+                  <div className="community-outline-program" key={program.id}>
+                    <strong>{program.name}</strong>
+                    {program.routines.map(routine => (
+                      <button
+                        className={`community-outline-routine ${routine.id === selectedRoutineId ? "community-outline-routine--active" : ""}`}
+                        key={routine.id}
+                        onClick={() => setSelectedRoutineId(routine.id)}
+                        type="button"
+                      >
+                        <span>{routine.name}</span>
+                        <em>{routine.language} - {routine.language === "ST" ? `${(routine.structuredText ?? "").split(/\r?\n/).length} lines` : `${routine.rungs.length} rungs`}</em>
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </aside>
+
+            <section className="page-card community-preview-pane">
+              <div className="community-preview-pane-head">
+                <div>
+                  <h2>{selectedRoutine?.name ?? "No routine selected"}</h2>
+                  {selectedRoutine && (
+                    <span>{selectedRoutine.language === "ST" ? "Structured Text" : "Ladder Logic"} read-only preview</span>
+                  )}
                 </div>
-              ))}
-            </div>
+                {selectedRoutine && <em>{selectedRoutine.language}</em>}
+              </div>
+              {selectedRoutine ? (
+                <CommunityRoutinePreview routine={selectedRoutine} tags={project.data.tags} theme={theme} />
+              ) : (
+                <div className="community-state">This project does not contain any routines.</div>
+              )}
+            </section>
           </section>
         </>
       )}

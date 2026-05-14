@@ -95,16 +95,6 @@ on public.community_projects (published, clone_count desc, updated_at desc);
 create index if not exists community_projects_tags_idx
 on public.community_projects using gin (tags);
 
-create or replace function public.increment_community_project_clone_count(project_id uuid)
-returns void
-language sql
-security definer
-set search_path = public
-as $$
-  update public.community_projects
-  set clone_count = clone_count + 1
-  where id = project_id and published = true;
-$$;
-
-grant execute on function public.increment_community_project_clone_count(uuid) to anon;
-grant execute on function public.increment_community_project_clone_count(uuid) to authenticated;
+revoke execute on function public.increment_community_project_clone_count(uuid) from anon;
+revoke execute on function public.increment_community_project_clone_count(uuid) from authenticated;
+drop function if exists public.increment_community_project_clone_count(uuid);

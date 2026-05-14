@@ -5,7 +5,6 @@ import {
   listCommunityProjects,
   parseTagInput,
   type CommunityProjectSummary,
-  type CommunitySort,
 } from "../lib/communityProjects";
 
 interface CommunityPageProps {
@@ -16,7 +15,6 @@ export function CommunityPage({ theme }: CommunityPageProps) {
   const [projects, setProjects] = useState<CommunityProjectSummary[]>([]);
   const [search, setSearch] = useState("");
   const [tagInput, setTagInput] = useState("");
-  const [sort, setSort] = useState<CommunitySort>("recent");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const tags = useMemo(() => parseTagInput(tagInput), [tagInput]);
@@ -26,7 +24,7 @@ export function CommunityPage({ theme }: CommunityPageProps) {
     const handle = window.setTimeout(() => {
       setLoading(true);
       setError(null);
-      void listCommunityProjects({ search, tags, sort })
+      void listCommunityProjects({ search, tags })
         .then(items => {
           if (!alive) return;
           setProjects(items);
@@ -43,7 +41,7 @@ export function CommunityPage({ theme }: CommunityPageProps) {
       alive = false;
       window.clearTimeout(handle);
     };
-  }, [search, tags, sort]);
+  }, [search, tags]);
 
   return (
     <PageShell theme={theme} eyebrow="Community" title="Community Projects" contentClassName="page-content--wide">
@@ -64,13 +62,6 @@ export function CommunityPage({ theme }: CommunityPageProps) {
             onChange={event => setTagInput(event.target.value)}
           />
         </label>
-        <label>
-          <span>Sort</span>
-          <select value={sort} onChange={event => setSort(event.target.value as CommunitySort)}>
-            <option value="recent">Recent</option>
-            <option value="popular">Popular</option>
-          </select>
-        </label>
       </section>
 
       {error && <div className="community-state community-state--error">{error}</div>}
@@ -84,19 +75,48 @@ export function CommunityPage({ theme }: CommunityPageProps) {
           <Link className="community-card" to={`/community/${project.id}`} key={project.id}>
             <div className="community-card-head">
               <h2>{project.title}</h2>
-              <span>{project.clone_count} clones</span>
+              <span>{new Date(project.updated_at).toLocaleDateString()}</span>
             </div>
             <p>{project.description || "No description provided."}</p>
+            <LanguageMixBar project={project} />
             <div className="community-tags">
               {project.tags.length === 0 ? <em>No tags</em> : project.tags.map(tag => <span key={tag}>{tag}</span>)}
             </div>
             <div className="community-card-foot">
               <span>{project.author_display_name}</span>
-              <time dateTime={project.updated_at}>{new Date(project.updated_at).toLocaleDateString()}</time>
+              <time dateTime={project.updated_at}>Updated {new Date(project.updated_at).toLocaleDateString()}</time>
             </div>
           </Link>
         ))}
       </section>
     </PageShell>
+  );
+}
+
+function LanguageMixBar({ project }: { project: CommunityProjectSummary }) {
+  const mix = project.language_mix;
+  const total = mix.ladderRoutines + mix.structuredTextRoutines;
+  if (total === 0) {
+    return (
+      <div className="community-language-mix community-language-mix--empty">
+        <span>No routines</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="community-language-mix" aria-label={`${mix.ladderPercent}% ladder, ${mix.structuredTextPercent}% structured text`}>
+      <div className="community-language-row">
+        <span>LAD {mix.ladderPercent}%</span>
+        <span>ST {mix.structuredTextPercent}%</span>
+      </div>
+      <div className="community-language-bar" aria-hidden="true">
+        <span className="community-language-bar-lad" style={{ width: `${mix.ladderPercent}%` }} />
+        <span className="community-language-bar-st" style={{ width: `${mix.structuredTextPercent}%` }} />
+      </div>
+      <div className="community-language-count">
+        {mix.ladderRoutines} ladder / {mix.structuredTextRoutines} ST routines
+      </div>
+    </div>
   );
 }

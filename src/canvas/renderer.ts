@@ -363,7 +363,8 @@ export class LadderRenderer {
     powerStates: Map<string, RungPowerState>,
     canvasW: number,
     tagValues: Map<string, boolean> = new Map(),
-    canvasH = 0
+    canvasH = 0,
+    opts: { readOnly?: boolean } = {}
   ): { h: number; w: number } {
     this.app.stage.position.set(0, 0);
     this.app.stage.scale.set(1, 1);
@@ -371,7 +372,7 @@ export class LadderRenderer {
     this._stage.scale.set(1, 1);
 
     this._tagValues = tagValues;
-    const visualRungs = this._buildVisualRungs(rungs);
+    const visualRungs = this._buildVisualRungs(rungs, opts.readOnly);
     // Remove stale rungs
     const currentIds = new Set(visualRungs.map(r => r.key));
     for (const [id, rr] of this._rungs) {
@@ -458,7 +459,7 @@ export class LadderRenderer {
     return { h: contentH, w: contentW };
   }
 
-  private _buildVisualRungs(rungs: Rung[]): VisualRung[] {
+  private _buildVisualRungs(rungs: Rung[], forceReadOnly = false): VisualRung[] {
     const rows: VisualRung[] = [];
     for (let i = 0; i < rungs.length; i++) {
       const rung = rungs[i];
@@ -485,7 +486,7 @@ export class LadderRenderer {
           rung,
           sourceRungId: rung.id,
           rungNumber,
-          readOnly: false,
+          readOnly: forceReadOnly,
           label: "EDIT",
         });
       } else {
@@ -494,7 +495,7 @@ export class LadderRenderer {
           rung,
           sourceRungId: rung.id,
           rungNumber,
-          readOnly: false,
+          readOnly: forceReadOnly,
         });
       }
     }

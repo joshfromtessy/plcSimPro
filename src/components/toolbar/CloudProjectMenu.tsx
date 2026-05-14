@@ -203,7 +203,7 @@ export function CloudProjectMenu() {
           {!communityLoading && communityProjects.map((item) => (
             <div className="cloud-project-row community-project-row" key={item.id}>
               <span>{item.title}</span>
-              <em>{item.clone_count} clones - {new Date(item.updated_at).toLocaleString()}</em>
+              <em>Updated {new Date(item.updated_at).toLocaleString()}</em>
               <button
                 className="community-unpublish-btn"
                 type="button"
