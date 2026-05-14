@@ -113,6 +113,9 @@ function LanguageMixBar({ project }: { project: CommunityProjectSummary }) {
     );
   }
 
+  const ladderWidth = Number(mix.ladderPercent);
+  const structuredTextWidth = Number(mix.structuredTextPercent);
+
   return (
     <div className="community-language-mix" aria-label={`${mix.ladderPercent}% ladder, ${mix.structuredTextPercent}% structured text`}>
       <div className="community-language-row">
@@ -120,8 +123,8 @@ function LanguageMixBar({ project }: { project: CommunityProjectSummary }) {
         <span>ST {mix.structuredTextPercent}%</span>
       </div>
       <div className="community-language-bar" aria-hidden="true">
-        <span className="community-language-bar-lad" style={{ width: `${mix.ladderPercent}%` }} />
-        <span className="community-language-bar-st" style={{ width: `${mix.structuredTextPercent}%` }} />
+        <span className="community-language-bar-lad" style={{ width: `${ladderWidth}%` }} />
+        <span className="community-language-bar-st" style={{ width: `${structuredTextWidth}%` }} />
       </div>
       <div className="community-language-count">
         {mix.ladderRungs} rungs / {mix.structuredTextLines} ST lines

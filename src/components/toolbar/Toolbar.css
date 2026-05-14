@@ -346,6 +346,11 @@
   resize: vertical;
 }
 
+.community-edit-form {
+  width: 100%;
+  margin-top: 8px;
+}
+
 .community-project-row {
   cursor: default;
 }
@@ -355,18 +360,51 @@
   border-color: transparent;
 }
 
-.community-unpublish-btn {
+.community-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.community-unpublish-btn,
+.community-secondary-action-btn,
+.community-save-edit-btn {
   margin-top: 4px;
   padding: 3px 7px;
-  border: 1px solid rgba(255, 68, 85, 0.35);
   border-radius: 4px;
+  font-size: 10px;
+}
+
+.community-unpublish-btn {
+  border: 1px solid rgba(255, 68, 85, 0.35);
   background: rgba(255, 68, 85, 0.08);
   color: var(--accent-red);
-  font-size: 10px;
 }
 
 .community-unpublish-btn:hover {
   border-color: var(--accent-red);
+}
+
+.community-secondary-action-btn {
+  border: 1px solid var(--border-light);
+  background: var(--bg-app);
+  color: var(--text-secondary);
+}
+
+.community-secondary-action-btn:hover {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.community-save-edit-btn {
+  border: 1px solid rgba(34, 204, 102, 0.45);
+  background: rgba(34, 204, 102, 0.1);
+  color: var(--accent-green);
+}
+
+.community-save-edit-btn:hover {
+  border-color: var(--accent-green);
 }
 
 .cloud-project-meta,

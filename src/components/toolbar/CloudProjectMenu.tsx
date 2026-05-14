@@ -4,6 +4,8 @@ import {
   parseTagInput,
   publishCommunityProject,
   unpublishCommunityProject,
+  updateCommunityProjectMetadata,
+  type CommunityDifficulty,
   type CommunityProjectSummary,
 } from "../../lib/communityProjects";
 import { useCloudProjectStore } from "../../store/cloudProjectStore";
@@ -31,8 +33,15 @@ export function CloudProjectMenu() {
   const [publishDescription, setPublishDescription] = useState("");
   const [publishAuthor, setPublishAuthor] = useState("");
   const [publishTags, setPublishTags] = useState("");
-  const [publishDifficulty, setPublishDifficulty] = useState<"beginner" | "intermediate" | "advanced">("beginner");
+  const [publishDifficulty, setPublishDifficulty] = useState<CommunityDifficulty>("beginner");
   const [publishRecipeNotes, setPublishRecipeNotes] = useState("");
+  const [editingCommunityId, setEditingCommunityId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editAuthor, setEditAuthor] = useState("");
+  const [editTags, setEditTags] = useState("");
+  const [editDifficulty, setEditDifficulty] = useState<CommunityDifficulty>("beginner");
+  const [editRecipeNotes, setEditRecipeNotes] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -91,6 +100,37 @@ export function CloudProjectMenu() {
         recipeNotes: publishRecipeNotes,
       });
       setPublishOpen(false);
+      await refreshCommunityProjects();
+    } catch (err) {
+      setCommunityError(getErrorMessage(err));
+      setCommunityLoading(false);
+    }
+  }
+
+  function beginEditCommunityProject(item: CommunityProjectSummary) {
+    setEditingCommunityId(item.id);
+    setEditTitle(item.title);
+    setEditDescription(item.description);
+    setEditAuthor(item.author_display_name);
+    setEditTags(item.tags.join(", "));
+    setEditDifficulty(item.difficulty);
+    setEditRecipeNotes(item.recipe_notes);
+  }
+
+  async function handleUpdateCommunityProject() {
+    if (!editingCommunityId) return;
+    setCommunityLoading(true);
+    setCommunityError(null);
+    try {
+      await updateCommunityProjectMetadata(editingCommunityId, {
+        title: editTitle,
+        description: editDescription,
+        authorDisplayName: editAuthor,
+        tags: parseTagInput(editTags),
+        difficulty: editDifficulty,
+        recipeNotes: editRecipeNotes,
+      });
+      setEditingCommunityId(null);
       await refreshCommunityProjects();
     } catch (err) {
       setCommunityError(getErrorMessage(err));
@@ -227,14 +267,67 @@ export function CloudProjectMenu() {
           {!communityLoading && communityProjects.map((item) => (
             <div className="cloud-project-row community-project-row" key={item.id}>
               <span>{item.title}</span>
-              <em>Updated {new Date(item.updated_at).toLocaleString()}</em>
-              <button
-                className="community-unpublish-btn"
-                type="button"
-                onClick={() => void handleUnpublish(item.id, item.title)}
-              >
-                Unpublish
-              </button>
+              <em>{item.difficulty} - Updated {new Date(item.updated_at).toLocaleString()}</em>
+              {editingCommunityId === item.id ? (
+                <div className="community-publish-form community-edit-form">
+                  <label>
+                    <span>Title</span>
+                    <input value={editTitle} onChange={event => setEditTitle(event.target.value)} />
+                  </label>
+                  <label>
+                    <span>Description</span>
+                    <textarea rows={3} value={editDescription} onChange={event => setEditDescription(event.target.value)} />
+                  </label>
+                  <label>
+                    <span>Author</span>
+                    <input value={editAuthor} onChange={event => setEditAuthor(event.target.value)} />
+                  </label>
+                  <label>
+                    <span>Tags</span>
+                    <input value={editTags} onChange={event => setEditTags(event.target.value)} />
+                  </label>
+                  <label>
+                    <span>Difficulty</span>
+                    <select
+                      value={editDifficulty}
+                      onChange={event => setEditDifficulty(event.target.value as CommunityDifficulty)}
+                    >
+                      <option value="beginner">Beginner</option>
+                      <option value="intermediate">Intermediate</option>
+                      <option value="advanced">Advanced</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Recipe notes</span>
+                    <textarea rows={4} value={editRecipeNotes} onChange={event => setEditRecipeNotes(event.target.value)} />
+                  </label>
+                  <div className="community-row-actions">
+                    <button className="community-save-edit-btn" type="button" onClick={() => void handleUpdateCommunityProject()} disabled={communityLoading}>
+                      Save metadata
+                    </button>
+                    <button className="community-secondary-action-btn" type="button" onClick={() => setEditingCommunityId(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="community-row-actions">
+                  <button
+                    className="community-secondary-action-btn"
+                    type="button"
+                    onClick={() => beginEditCommunityProject(item)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="community-unpublish-btn"
+                    type="button"
+                    onClick={() => void handleUnpublish(item.id, item.title)}
+                  >
+                    Unpublish
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

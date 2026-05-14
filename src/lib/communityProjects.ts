@@ -39,9 +39,11 @@ export interface CommunityPublishMetadata {
   recipeNotes: string;
 }
 
+export type CommunityMetadataUpdate = CommunityPublishMetadata;
+
 export interface CommunityLanguageMix {
-  ladderPercent: number;
-  structuredTextPercent: number;
+  ladderPercent: string;
+  structuredTextPercent: string;
   ladderRungs: number;
   structuredTextLines: number;
 }
@@ -148,6 +150,28 @@ export async function unpublishCommunityProject(projectId: string) {
   if (error) throw error;
 }
 
+export async function updateCommunityProjectMetadata(projectId: string, metadata: CommunityMetadataUpdate) {
+  if (!supabase) throw new Error("Supabase is not configured yet.");
+
+  const { data, error } = await supabase
+    .from("community_projects")
+    .update({
+      title: metadata.title.trim() || "Untitled Project",
+      description: metadata.description.trim(),
+      author_display_name: metadata.authorDisplayName.trim() || "PLC Sim User",
+      tags: normalizeTags(metadata.tags),
+      difficulty: normalizeDifficulty(metadata.difficulty),
+      recipe_notes: metadata.recipeNotes.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", projectId)
+    .select("id, title, description, author_display_name, tags, difficulty, recipe_notes, featured, updated_at, clone_count")
+    .single();
+
+  if (error) throw error;
+  return toSummary(data as Omit<CommunityProjectRow, "owner_id" | "source_project_id" | "data" | "published_at">);
+}
+
 export async function listMyCommunityProjects() {
   if (!supabase) throw new Error("Supabase is not configured yet.");
 
@@ -250,19 +274,23 @@ function getLanguageMix(project?: PlcProject): CommunityLanguageMix {
 
   if (total === 0) {
     return {
-      ladderPercent: 0,
-      structuredTextPercent: 0,
+      ladderPercent: "0",
+      structuredTextPercent: "0",
       ladderRungs: 0,
       structuredTextLines: 0,
     };
   }
 
   return {
-    ladderPercent: Math.round((ladderRungs / total) * 100),
-    structuredTextPercent: Math.round((structuredTextLines / total) * 100),
+    ladderPercent: formatPercent((ladderRungs / total) * 100),
+    structuredTextPercent: formatPercent((structuredTextLines / total) * 100),
     ladderRungs,
     structuredTextLines,
   };
+}
+
+function formatPercent(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function countStructuredTextLines(source: string): number {
