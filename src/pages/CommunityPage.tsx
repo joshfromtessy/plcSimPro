@@ -74,10 +74,19 @@ export function CommunityPage({ theme }: CommunityPageProps) {
         {projects.map(project => (
           <Link className="community-card" to={`/community/${project.id}`} key={project.id}>
             <div className="community-card-head">
-              <h2>{project.title}</h2>
+              <div>
+                <h2>{project.title}</h2>
+                <div className="community-card-badges">
+                  {project.featured && <span className="community-featured-badge">Featured</span>}
+                  <span className={`community-difficulty-badge community-difficulty-badge--${project.difficulty}`}>
+                    {project.difficulty}
+                  </span>
+                </div>
+              </div>
               <span>{new Date(project.updated_at).toLocaleDateString()}</span>
             </div>
             <p>{project.description || "No description provided."}</p>
+            {project.recipe_notes && <p className="community-recipe-teaser">{project.recipe_notes}</p>}
             <LanguageMixBar project={project} />
             <div className="community-tags">
               {project.tags.length === 0 ? <em>No tags</em> : project.tags.map(tag => <span key={tag}>{tag}</span>)}
@@ -95,11 +104,11 @@ export function CommunityPage({ theme }: CommunityPageProps) {
 
 function LanguageMixBar({ project }: { project: CommunityProjectSummary }) {
   const mix = project.language_mix;
-  const total = mix.ladderRoutines + mix.structuredTextRoutines;
+  const total = mix.ladderRungs + mix.structuredTextLines;
   if (total === 0) {
     return (
       <div className="community-language-mix community-language-mix--empty">
-        <span>No routines</span>
+        <span>No ladder rungs or ST lines</span>
       </div>
     );
   }
@@ -115,7 +124,7 @@ function LanguageMixBar({ project }: { project: CommunityProjectSummary }) {
         <span className="community-language-bar-st" style={{ width: `${mix.structuredTextPercent}%` }} />
       </div>
       <div className="community-language-count">
-        {mix.ladderRoutines} ladder / {mix.structuredTextRoutines} ST routines
+        {mix.ladderRungs} rungs / {mix.structuredTextLines} ST lines
       </div>
     </div>
   );

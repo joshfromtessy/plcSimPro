@@ -93,6 +93,12 @@ export function CommunityProjectPage({ theme }: CommunityProjectPageProps) {
         <>
           <section className="page-card page-card-large community-preview-hero">
             <div>
+              <div className="community-card-badges community-preview-badges">
+                {project.featured && <span className="community-featured-badge">Featured</span>}
+                <span className={`community-difficulty-badge community-difficulty-badge--${project.difficulty}`}>
+                  {project.difficulty}
+                </span>
+              </div>
               <h2>{project.title}</h2>
               <p>{project.description || "No description provided."}</p>
               <div className="community-tags">
@@ -112,6 +118,13 @@ export function CommunityProjectPage({ theme }: CommunityProjectPageProps) {
             <div><strong>{stats.ladderRungs}</strong><span>Rungs</span></div>
             <div><strong>{stats.tags}</strong><span>Tags</span></div>
           </section>
+
+          {project.recipe_notes && (
+            <section className="page-card community-recipe-card">
+              <h2>Project Recipe</h2>
+              <p>{project.recipe_notes}</p>
+            </section>
+          )}
 
           <section className="community-preview-workbench" aria-label="Read-only project preview">
             <aside className="page-card community-preview-sidebar">

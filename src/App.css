@@ -622,6 +622,56 @@
   font-size: 17px;
 }
 
+.community-card-head > div {
+  min-width: 0;
+}
+
+.community-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.community-featured-badge,
+.community-difficulty-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 3px 7px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.community-featured-badge {
+  border-color: rgba(240, 180, 41, 0.55);
+  background: rgba(240, 180, 41, 0.12);
+  color: var(--accent-yellow) !important;
+}
+
+.community-difficulty-badge--beginner {
+  border-color: rgba(34, 204, 102, 0.45);
+  background: rgba(34, 204, 102, 0.1);
+  color: var(--accent-green) !important;
+}
+
+.community-difficulty-badge--intermediate {
+  border-color: rgba(74, 140, 255, 0.45);
+  background: rgba(74, 140, 255, 0.1);
+  color: var(--accent-blue) !important;
+}
+
+.community-difficulty-badge--advanced {
+  border-color: rgba(255, 68, 85, 0.45);
+  background: rgba(255, 68, 85, 0.1);
+  color: var(--accent-red) !important;
+}
+
 .community-card-head span,
 .community-card-foot,
 .community-tags em {
@@ -636,6 +686,14 @@
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.55;
+}
+
+.community-recipe-teaser {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--text-dim) !important;
 }
 
 .community-language-mix {
@@ -746,6 +804,14 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: 20px;
+}
+
+.community-preview-badges {
+  margin: 0 0 12px;
+}
+
+.community-recipe-card p {
+  white-space: pre-wrap;
 }
 
 .community-preview-meta,

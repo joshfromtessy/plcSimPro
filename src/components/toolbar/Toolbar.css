@@ -337,6 +337,11 @@
   background: var(--bg-app);
 }
 
+.community-publish-form select,
+.community-publish-form textarea {
+  width: 100%;
+}
+
 .community-publish-form textarea {
   resize: vertical;
 }

@@ -31,6 +31,8 @@ export function CloudProjectMenu() {
   const [publishDescription, setPublishDescription] = useState("");
   const [publishAuthor, setPublishAuthor] = useState("");
   const [publishTags, setPublishTags] = useState("");
+  const [publishDifficulty, setPublishDifficulty] = useState<"beginner" | "intermediate" | "advanced">("beginner");
+  const [publishRecipeNotes, setPublishRecipeNotes] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -85,6 +87,8 @@ export function CloudProjectMenu() {
         description: publishDescription,
         authorDisplayName: publishAuthor,
         tags: parseTagInput(publishTags),
+        difficulty: publishDifficulty,
+        recipeNotes: publishRecipeNotes,
       });
       setPublishOpen(false);
       await refreshCommunityProjects();
@@ -158,6 +162,26 @@ export function CloudProjectMenu() {
                   value={publishTags}
                   placeholder="timer, sequencing"
                   onChange={event => setPublishTags(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Difficulty</span>
+                <select
+                  value={publishDifficulty}
+                  onChange={event => setPublishDifficulty(event.target.value as "beginner" | "intermediate" | "advanced")}
+                >
+                  <option value="beginner">Beginner</option>
+                  <option value="intermediate">Intermediate</option>
+                  <option value="advanced">Advanced</option>
+                </select>
+              </label>
+              <label>
+                <span>Recipe notes</span>
+                <textarea
+                  rows={4}
+                  value={publishRecipeNotes}
+                  placeholder="What this teaches, how to run it, or what to try first."
+                  onChange={event => setPublishRecipeNotes(event.target.value)}
                 />
               </label>
               <button className="toolbar-menu-row primary" onClick={() => void handlePublish()} disabled={communityLoading}>

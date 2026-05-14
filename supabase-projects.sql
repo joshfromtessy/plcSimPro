@@ -47,6 +47,9 @@ create table if not exists public.community_projects (
   description text not null default '',
   author_display_name text not null default 'PLC Sim User',
   tags text[] not null default '{}',
+  difficulty text not null default 'beginner' check (difficulty in ('beginner', 'intermediate', 'advanced')),
+  recipe_notes text not null default '',
+  featured boolean not null default false,
   data jsonb not null,
   published boolean not null default true,
   clone_count integer not null default 0 check (clone_count >= 0),
@@ -54,6 +57,42 @@ create table if not exists public.community_projects (
   updated_at timestamptz not null default now(),
   unique (owner_id, source_project_id)
 );
+
+alter table public.community_projects
+  add column if not exists difficulty text not null default 'beginner';
+
+alter table public.community_projects
+  add column if not exists recipe_notes text not null default '';
+
+alter table public.community_projects
+  add column if not exists featured boolean not null default false;
+
+alter table public.community_projects
+  alter column difficulty set default 'beginner';
+
+alter table public.community_projects
+  alter column recipe_notes set default '';
+
+alter table public.community_projects
+  alter column featured set default false;
+
+update public.community_projects
+set
+  difficulty = coalesce(difficulty, 'beginner'),
+  recipe_notes = coalesce(recipe_notes, ''),
+  featured = coalesce(featured, false);
+
+alter table public.community_projects
+  alter column difficulty set not null,
+  alter column recipe_notes set not null,
+  alter column featured set not null;
+
+alter table public.community_projects
+  drop constraint if exists community_projects_difficulty_check;
+
+alter table public.community_projects
+  add constraint community_projects_difficulty_check
+  check (difficulty in ('beginner', 'intermediate', 'advanced'));
 
 grant select on public.community_projects to anon;
 grant select, insert, update, delete on public.community_projects to authenticated;
@@ -86,8 +125,10 @@ on public.community_projects for delete
 to authenticated
 using ((select auth.uid()) = owner_id);
 
-create index if not exists community_projects_published_updated_idx
-on public.community_projects (published, updated_at desc);
+drop index if exists public.community_projects_published_updated_idx;
+
+create index community_projects_published_updated_idx
+on public.community_projects (published, featured desc, updated_at desc);
 
 create index if not exists community_projects_published_clone_idx
 on public.community_projects (published, clone_count desc, updated_at desc);
