@@ -58,6 +58,7 @@ import {
   defaultTimerData,
   defaultCounterData,
 } from "../model/simulate";
+import { parseAsciiRungs } from "../model/ascii";
 
 type ProjectHistorySnapshot = {
   project: PlcProject;
@@ -171,6 +172,7 @@ export interface ProjectState {
 
   // ── Rungs
   addRung: (routineId: string, comment?: string) => void;
+  replaceRungWithAscii: (routineId: string, rungId: string, source: string) => ValidationResult;
   deleteRung: (routineId: string, rungId: string) => void;
   setRungComment: (routineId: string, rungId: string, comment: string) => void;
   setRungDisabled: (routineId: string, rungId: string, disabled: boolean) => void;
@@ -504,6 +506,45 @@ export const useProjectStore = create<ProjectState>()(
             routine.rungs.push(rung);
           }
         }),
+
+      replaceRungWithAscii: (routineId, rungId, source) => {
+        let parsed: ReturnType<typeof parseAsciiRungs>;
+        try {
+          parsed = parseAsciiRungs(source);
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : "Invalid ASCII rung text";
+          set((s) => { s.lastError = reason; });
+          return { valid: false, reason };
+        }
+
+        if (parsed.rungs.length === 0) {
+          const reason = "Enter at least one ASCII rung.";
+          set((s) => { s.lastError = reason; });
+          return { valid: false, reason };
+        }
+
+        set((s) => {
+          const routine = findRoutine(s.project, routineId);
+          if (!routine) {
+            s.lastError = "Routine not found";
+            return;
+          }
+          const idx = routine.rungs.findIndex((r) => r.id === rungId);
+          if (idx === -1) {
+            s.lastError = "Rung not found";
+            return;
+          }
+
+          pushUndo(s);
+          for (const hint of parsed.tagHints) {
+            ensureTagDefinition(s.project.tags, hint.name, hint.dataType, hint.preset);
+          }
+          routine.rungs.splice(idx, 1, ...parsed.rungs);
+          s.lastError = null;
+        });
+
+        return { valid: true };
+      },
 
       deleteRung: (routineId, rungId) =>
         set((s) => {
@@ -1140,6 +1181,34 @@ function pushUndo(state: ProjectState): void {
   state.undoStack.push(snapshotProjectState(state));
   if (state.undoStack.length > 100) state.undoStack.shift();
   state.redoStack = [];
+}
+
+function ensureTagDefinition(
+  tags: TagDefinition[],
+  name: string,
+  dataType: TagDataType,
+  preset?: number
+): void {
+  const existing = tags.find((t) => t.name === name);
+  if (existing) {
+    if (existing.dataType === "TIMER" && existing.timerData && preset !== undefined) {
+      existing.timerData.preset = preset;
+    }
+    if (existing.dataType === "COUNTER" && existing.counterData && preset !== undefined) {
+      existing.counterData.preset = preset;
+    }
+    return;
+  }
+
+  const tag: TagDefinition = {
+    id: genId("tag"),
+    name,
+    dataType,
+    value: dataType === "BOOL" ? false : 0,
+  };
+  if (dataType === "TIMER") tag.timerData = defaultTimerData(preset ?? 1000);
+  if (dataType === "COUNTER") tag.counterData = defaultCounterData(preset ?? 10);
+  tags.push(tag);
 }
 
 function findRoutineFromState(

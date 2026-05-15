@@ -204,6 +204,39 @@
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
+.ascii-rung-edit {
+  position: absolute;
+  z-index: 22;
+  width: min(620px, calc(100% - 24px));
+  transform: translate(8px, 8px);
+  padding: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--accent-blue);
+  border-radius: 6px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.ascii-rung-edit-input {
+  width: 100%;
+  min-height: 140px;
+  max-height: 360px;
+  resize: vertical;
+  box-sizing: border-box;
+  padding: 8px;
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ascii-rung-edit-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
 .tag-quick-edit-head {
   display: flex;
   align-items: center;

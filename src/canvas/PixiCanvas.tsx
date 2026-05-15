@@ -24,6 +24,12 @@ type TagEditorState = {
   y: number;
 };
 
+type AsciiEditorState = {
+  rungId: string;
+  x: number;
+  y: number;
+};
+
 type TagDropPreview = {
   rowIndex: number;
   rowCount: number;
@@ -52,7 +58,7 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
     absorbNext, ejectFromLeg,
     assignTag, setInstructionParams,
     setNodeComment, setRungComment,
-    beginOnlineEditRung,
+    beginOnlineEditRung, replaceRungWithAscii,
   } = useProjectStore();
   const { scanResult, mode } = useSimulationStore();
   const { selection, drag, showNodeComments, showRungComments, toggleNodeComments, toggleRungComments } = useEditorStore();
@@ -60,6 +66,7 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
   const [complexEditor, setComplexEditor] = useState<TagEditorState | null>(null);
   const [compareMovEditor, setCompareMovEditor] = useState<TagEditorState | null>(null);
   const [rungCommentEditor, setRungCommentEditor] = useState<TagEditorState | null>(null);
+  const [asciiEditor, setAsciiEditor] = useState<AsciiEditorState | null>(null);
 
   // Stores the current drag-over drop position â€” use a ref to avoid re-renders
   const dropTargetRef  = useRef<InsertPosition | null>(null);
@@ -643,6 +650,10 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
   }
 
   function handleDragStart(e: React.DragEvent) {
+    if ((e.target as HTMLElement | null)?.closest(".tag-quick-edit")) {
+      return;
+    }
+
     // Rung reorder drag — initiated from the gutter number column
     const rungDrag = rungDragRef.current;
     if (rungDrag) {
@@ -688,6 +699,10 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
 
     const pending = dragNodeRef.current;
     if (!pending) { e.preventDefault(); return; }
+    setTagEditor(null);
+    setComplexEditor(null);
+    setCompareMovEditor(null);
+    setRungCommentEditor(null);
     e.dataTransfer.setData("application/plc-move", JSON.stringify(pending));
     e.dataTransfer.effectAllowed = "move";
 
@@ -761,13 +776,18 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
   }
 
   function handleDragOver(e: React.DragEvent) {
-    e.preventDefault();
     const isRungMove    = e.dataTransfer.types.includes("application/plc-rung-move");
     const isNodeMove    = e.dataTransfer.types.includes("application/plc-move");
     const isRailExtend  = e.dataTransfer.types.includes("application/plc-rail-extend");
     const isBranchWrap  = e.dataTransfer.types.includes("application/plc-branch-wrap");
     const isAddLeg      = e.dataTransfer.types.includes("application/plc-add-leg");
     const isTagDrop     = e.dataTransfer.types.includes("application/plc-tag");
+    const isInstruction = drag.active || e.dataTransfer.types.includes("application/plc-instruction");
+    if (!isRungMove && !isNodeMove && !isRailExtend && !isBranchWrap && !isAddLeg && !isTagDrop && !isInstruction) {
+      return;
+    }
+
+    e.preventDefault();
     e.dataTransfer.dropEffect = (isRungMove || isNodeMove || isRailExtend) ? "move" : "copy";
 
     if (isTagDrop) {
@@ -939,6 +959,17 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
   }
 
   function handleDrop(e: React.DragEvent) {
+    const isKnownPlcDrop =
+      drag.active ||
+      e.dataTransfer.types.includes("application/plc-rung-move") ||
+      e.dataTransfer.types.includes("application/plc-move") ||
+      e.dataTransfer.types.includes("application/plc-rail-extend") ||
+      e.dataTransfer.types.includes("application/plc-branch-wrap") ||
+      e.dataTransfer.types.includes("application/plc-add-leg") ||
+      e.dataTransfer.types.includes("application/plc-tag") ||
+      e.dataTransfer.types.includes("application/plc-instruction");
+    if (!isKnownPlcDrop) return;
+
     e.preventDefault();
     rendererRef.current?.clearDropZone();
     rendererRef.current?.clearDropAnchors();
@@ -1099,6 +1130,25 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
     insertInstruction(routine.id, position, type);
   }
 
+  function handleClick(e: React.MouseEvent) {
+    if (mode === "running") return;
+    const coords = getCanvasCoords(e);
+    if (!coords || !routine) return;
+    if (rendererRef.current?.hitTestRungDeleteButton(coords.x, coords.y)) return;
+    const hitGutterRungId = rendererRef.current?.hitTestOnlineEditGutter(coords.x, coords.y);
+    if (!hitGutterRungId) return;
+
+    const wrapRect = canvasRef.current?.getBoundingClientRect();
+    const x = wrapRect ? e.clientX - wrapRect.left : e.clientX;
+    const y = wrapRect ? e.clientY - wrapRect.top + (canvasRef.current?.scrollTop ?? 0) : e.clientY;
+    useEditorStore.getState().setSelection({ kind: "rung", rungId: hitGutterRungId });
+    setAsciiEditor({ rungId: hitGutterRungId, x, y });
+    setTagEditor(null);
+    setComplexEditor(null);
+    setCompareMovEditor(null);
+    setRungCommentEditor(null);
+  }
+
   function handleDoubleClick(e: React.MouseEvent) {
     const coords = getCanvasCoords(e);
     if (!coords) return;
@@ -1107,13 +1157,14 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
     const editorY = wrapRect ? e.clientY - wrapRect.top + (canvasRef.current?.scrollTop ?? 0) : e.clientY;
 
     const hitGutterRungId = rendererRef.current?.hitTestOnlineEditGutter(coords.x, coords.y);
-    if (hitGutterRungId && routine) {
+    if (hitGutterRungId && routine && mode === "running") {
       beginOnlineEditRung(routine.id, hitGutterRungId);
       useEditorStore.getState().setSelection({ kind: "rung", rungId: hitGutterRungId });
       setTagEditor(null);
       setComplexEditor(null);
       setCompareMovEditor(null);
       setRungCommentEditor(null);
+      setAsciiEditor(null);
       return;
     }
 
@@ -1134,6 +1185,7 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
         setComplexEditor(null);
         setCompareMovEditor(null);
         setRungCommentEditor(null);
+        setAsciiEditor(null);
         return;
       }
       const isTimerCounter = ["TON","TOF","RTO","CTU","CTD"].includes(node.type);
@@ -1143,16 +1195,19 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
         setTagEditor(null);
         setCompareMovEditor(null);
         setRungCommentEditor(null);
+        setAsciiEditor(null);
       } else if (isCompareMov) {
         setCompareMovEditor(editorState);
         setTagEditor(null);
         setComplexEditor(null);
         setRungCommentEditor(null);
+        setAsciiEditor(null);
       } else {
         setTagEditor(editorState);
         setComplexEditor(null);
         setCompareMovEditor(null);
         setRungCommentEditor(null);
+        setAsciiEditor(null);
       }
       return;
     }
@@ -1164,6 +1219,7 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
       setTagEditor(null);
       setComplexEditor(null);
       setCompareMovEditor(null);
+      setAsciiEditor(null);
     }
   }
 
@@ -1408,6 +1464,7 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onClick={handleClick}
         onDoubleClick={handleDoubleClick}
       >
         {routine.rungs.length === 0 && (
@@ -1447,6 +1504,14 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
             onClose={() => setRungCommentEditor(null)}
           />
         )}
+
+        {asciiEditor && (
+          <AsciiRungEditor
+            editor={asciiEditor}
+            onApply={(text) => replaceRungWithAscii(routine.id, asciiEditor.rungId, text)}
+            onClose={() => setAsciiEditor(null)}
+          />
+        )}
       </div>
 
       {selection?.kind === "leg" && (
@@ -1472,6 +1537,67 @@ export function PixiCanvas({ theme }: PixiCanvasProps) {
 // ---------------------------------------------------------------------------
 // Pointer tag editor
 // ---------------------------------------------------------------------------
+
+function AsciiRungEditor({ editor, onApply, onClose }: {
+  editor: AsciiEditorState;
+  onApply: (text: string) => { valid: boolean; reason?: string };
+  onClose: () => void;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [source, setSource] = useState("");
+
+  useEffect(() => {
+    function handlePointerDown(e: PointerEvent) {
+      if (!panelRef.current?.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [onClose]);
+
+  function apply() {
+    const result = onApply(source);
+    if (result.valid) onClose();
+  }
+
+  return (
+    <div
+      ref={panelRef}
+      className="ascii-rung-edit"
+      style={{ left: editor.x, top: editor.y }}
+      onPointerDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
+    >
+      <div className="tag-quick-edit-head">
+        <span>ASCII Rung</span>
+        <button type="button" onClick={onClose}>x</button>
+      </div>
+      <textarea
+        className="ascii-rung-edit-input"
+        autoFocus
+        spellCheck={false}
+        value={source}
+        onChange={e => setSource(e.target.value)}
+        onKeyDown={e => {
+          if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+            e.preventDefault();
+            apply();
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+      />
+      <button
+        type="button"
+        className="tag-quick-edit-apply"
+        onClick={apply}
+      >
+        Apply
+      </button>
+    </div>
+  );
+}
 
 function TagQuickEdit({ editor, routineId, onClose }: {
   editor: TagEditorState;

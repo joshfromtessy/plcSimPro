@@ -841,8 +841,8 @@ export class LadderRenderer {
     return s.length > max ? s.slice(0, max - 1) + "…" : s;
   }
 
-  private _truncMiddleOperand(s: string): string {
-    return this._truncOp(s || "?", 10);
+  private _truncMiddleOperand(s: string, max = 10): string {
+    return this._truncOp(s || "?", max);
   }
 
   private _truncLiveValue(s: string): string {
@@ -850,7 +850,7 @@ export class LadderRenderer {
   }
 
   private _truncTagLabel(s: string): string {
-    return this._truncOp(s || "?", 16);
+    return this._truncOp(s || "?", 12);
   }
 
   private _wrapComment(s: string, maxChars = 13, maxLines = 3): string {
@@ -1049,11 +1049,11 @@ export class LadderRenderer {
         : (counterData?.accum ?? 0);
 
       const presetDisplay = livePreset !== undefined ? String(livePreset) : p?.presetTag
-        ? `[${p.presetTag.length > 9 ? p.presetTag.slice(0, 8) + "…" : p.presetTag}]`
+        ? `[${this._truncOp(p.presetTag, 7)}]`
         : String(p?.preset ?? (isTimer ? 1000 : 10));
 
       const tagDisplay = node.tagName
-        ? (node.tagName.length > 10 ? node.tagName.slice(0, 9) + "…" : node.tagName)
+        ? this._truncOp(node.tagName, 8)
         : "?";
 
       const labelSt = new TextStyle({
@@ -1133,17 +1133,24 @@ export class LadderRenderer {
       const liveSt  = new TextStyle({ fontFamily: "Consolas, monospace", fontSize: 11, fill: powered ? C.textGreen : C.textDim, fontWeight: "bold" });
 
       const drawOperandRow = (label: string, operand: string, rowY: number, style: TextStyle, valueX = bx + 38) => {
+        const liveValue = this._formatLiveValue(operand);
+        const hasLiveValue = Boolean(liveValue && liveValue !== operand.trim());
+        const liveDisplay = hasLiveValue ? this._truncLiveValue(liveValue) : "";
+        const approxCharW = 7;
+        const liveReserve = hasLiveValue ? Math.max(24, liveDisplay.length * approxCharW + 8) : 0;
+        const availableNameW = Math.max(20, bx + bw - 4 - liveReserve - valueX);
+        const maxNameChars = Math.max(3, Math.floor(availableNameW / approxCharW));
+
         const lbl = new Text({ text: label, style: labelSt });
         lbl.anchor.set(0, 0.5); lbl.position.set(bx + 6, rowY);
         container.addChild(lbl);
 
-        const name = new Text({ text: this._truncMiddleOperand(operand), style });
+        const name = new Text({ text: this._truncMiddleOperand(operand, maxNameChars), style });
         name.anchor.set(0, 0.5); name.position.set(valueX, rowY);
         container.addChild(name);
 
-        const liveValue = this._formatLiveValue(operand);
-        if (liveValue && liveValue !== operand.trim()) {
-          const live = new Text({ text: this._truncLiveValue(liveValue), style: liveSt });
+        if (hasLiveValue) {
+          const live = new Text({ text: liveDisplay, style: liveSt });
           live.anchor.set(1, 0.5); live.position.set(bx + bw - 4, rowY);
           container.addChild(live);
         }
